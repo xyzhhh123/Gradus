@@ -119,6 +119,13 @@ Gradus/
 3. **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are all async; the loop never blocks.
 4. **Tools belong to the upper layer.** `agent` only defines the `AgentTool` protocol; file and shell operations live in `coding`.
 
+## Acknowledgements
+
+Gradus's layering, event model, and tool contract were informed by these open-source projects:
+
+- **Pi** (`@earendil-works/pi-agent-core`): reference for the agent loop, hook system, steering / follow-up, and tool protocol.
+- **OpenCode**: reference for API and tool design.
+
 ## License
 
-TBD.
+[MIT](LICENSE)

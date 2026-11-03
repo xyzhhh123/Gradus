@@ -119,6 +119,13 @@ Gradus/
 3. **全链路异步**：`Provider.stream()`、`run_loop()`、`AgentTool.execute()` 都是异步的，循环内不做阻塞 I/O。
 4. **工具由上层实现**：`agent` 只定义 `AgentTool` 协议，读写文件、执行命令都在 `coding`。
 
+## 致谢
+
+Gradus 的分层方式、事件模型与工具契约参考了以下开源项目：
+
+- **Pi**（`@earendil-works/pi-agent-core`）：agent loop、hook 体系、steering / follow-up 与工具协议的参考。
+- **OpenCode**：API 与工具体系设计的参考。
+
 ## 许可
 
-未定。
+[MIT](LICENSE)
