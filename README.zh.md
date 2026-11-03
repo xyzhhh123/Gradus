@@ -1,5 +1,7 @@
 # Gradus
 
+[English](README.md)
+
 分层的 Agent 运行时。模型协议、控制循环、产品装配各归一层，依赖只能向下：
 
 ```

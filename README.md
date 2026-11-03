@@ -1,5 +1,7 @@
 # Gradus
 
+[中文](README.zh.md)
+
 A layered agent runtime. Model protocols, the control loop, and product assembly each live in their own layer, and dependencies only point downward:
 
 ```
