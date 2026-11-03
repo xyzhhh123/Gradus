@@ -1,0 +1,16 @@
+[project]
+name = "gradus"
+version = "0.1.0"
+description = "Gradus: a layered agent runtime"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "jsonschema>=4.26.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["gradus/ai/tests", "gradus/agent/tests"]
+pythonpath = ["."]

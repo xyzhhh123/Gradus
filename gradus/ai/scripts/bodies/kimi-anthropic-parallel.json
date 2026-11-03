@@ -1,0 +1,27 @@
+{
+  "model": "kimi-k2.6",
+  "max_tokens": 1024,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "同时读取 a.py 和 b.py。请在一次回复里同时发起两个 read_file 调用，不要分两轮。"
+    }
+  ],
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "读取一个文件的完整内容",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "文件路径"
+          }
+        },
+        "required": ["path"]
+      }
+    }
+  ]
+}

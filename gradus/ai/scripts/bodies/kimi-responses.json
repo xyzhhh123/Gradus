@@ -1,0 +1,33 @@
+{
+  "model": "kimi-k2.6",
+  "stream": true,
+  "store": false,
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "读一下 a.py，然后用一句话说明里面写了什么。"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "read_file",
+      "description": "读取一个文件的完整内容",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "文件路径"
+          }
+        },
+        "required": ["path"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "model": "kimi-k2.6",
+  "stream": true,
+  "store": false,
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "用一句话说明 Python 的 GIL 是什么。"
+        }
+      ]
+    }
+  ]
+}

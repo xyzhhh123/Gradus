@@ -1,0 +1,1083 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_6ae364703bd0f5bbe54e53d8","object":"response","created_at":1793287281,"completed_at":null,"status":"in_progress","error":null,"incomplete_details":null,"output":[],"usage":null,"store":false,"background":false,"previous_response_id":null,"conversation":null,"instructions":null,"reasoning":null,"text":{"format":{"type":"text"}},"tools":[],"tool_choice":"auto","parallel_tool_calls":true,"max_output_tokens":null,"max_tool_calls":null,"metadata":null,"model":"kimi-k2.6","temperature":1,"top_p":0.95,"presence_penalty":0,"frequency_penalty":0,"top_logprobs":0,"truncation":"disabled","prompt_cache_key":null,"safety_identifier":null,"service_tier":"default"}}
+
+event: response.in_progress
+data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_6ae364703bd0f5bbe54e53d8","object":"response","created_at":1793287281,"completed_at":null,"status":"in_progress","error":null,"incomplete_details":null,"output":[],"usage":null,"store":false,"background":false,"previous_response_id":null,"conversation":null,"instructions":null,"reasoning":null,"text":{"format":{"type":"text"}},"tools":[],"tool_choice":"auto","parallel_tool_calls":true,"max_output_tokens":null,"max_tool_calls":null,"metadata":null,"model":"kimi-k2.6","temperature":1,"top_p":0.95,"presence_penalty":0,"frequency_penalty":0,"top_logprobs":0,"truncation":"disabled","prompt_cache_key":null,"safety_identifier":null,"service_tier":"default"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"type":"reasoning","id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","status":"in_progress","summary":[]}}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","sequence_number":3,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"part":{"text":"","type":"summary_text"}}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":4,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"用户"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":5,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"要求"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":6,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"用"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":7,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"一句话"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":8,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"说明"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":9,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":10,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":11,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":12,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":13,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":14,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":15,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是什么"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":16,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":17,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":18,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":19,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"（"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":20,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Global"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":21,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Interpreter"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":22,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Lock"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":23,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":24,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全局"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":25,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":26,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":27,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":28,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"）"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":29,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":30,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":31,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":32,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":33,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":34,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"（"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":35,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"特别是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":36,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" C"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":37,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":38,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"）"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":39,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"中的一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":40,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"机制"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":41,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":42,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":43,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"确保"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":44,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"同一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":45,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"时刻"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":46,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"只有一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":47,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":48,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"在执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":49,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":50,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":51,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":52,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":53,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":54,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"关键点"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":55,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"：\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":56,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"-"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":57,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":58,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全称"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":59,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"："}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":60,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Global"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":61,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Interpreter"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":62,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Lock"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":63,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":64,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"-"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":65,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":66,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"作用"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":67,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"："}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":68,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"防止"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":69,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"多"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":70,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":71,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"同时"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":72,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":73,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":74,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":75,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":76,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":77,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":78,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"-"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":79,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":80,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"影响"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":81,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"："}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":82,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"使得"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":83,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"多"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":84,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":85,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"在"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":86,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" CPU"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":87,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":88,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"密集型"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":89,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"任务"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":90,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"上"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":91,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"无法"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":92,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"真正"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":93,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"并行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":94,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":95,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":96,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"-"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":97,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":98,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"适用"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":99,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"："}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":100,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"主要针对"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":101,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" C"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":102,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":103,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":104,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"实现"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":105,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":106,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"我需要"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":107,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"用"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":108,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"一句话"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":109,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"简洁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":110,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"准确地"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":111,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"描述"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":112,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":113,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":114,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"可能的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":115,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"表述"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":116,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"：\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":117,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"1"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":118,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"."}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":119,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":120,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":121,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":122,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":123,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" C"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":124,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":125,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":126,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":127,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":128,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"中的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":129,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全局"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":130,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":131,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":132,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":133,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":134,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":135,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"确保"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":136,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"同一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":137,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"时刻"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":138,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"只有一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":139,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":140,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"能"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":141,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":142,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":143,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":144,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":145,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":146,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":147,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"2"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":148,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"."}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":149,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":150,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":151,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":152,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":153,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":154,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":155,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":156,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":157,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"的一把"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":158,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全局"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":159,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":160,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":161,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":162,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"限制"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":163,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"任何"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":164,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"时刻"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":165,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"仅"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":166,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"有一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":167,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":168,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"在执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":169,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":170,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":171,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":172,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"3"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":173,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"."}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":174,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":175,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":176,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":177,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":178,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":179,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"（"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":180,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全局"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":181,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":182,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":183,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":184,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"）"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":185,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":186,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" C"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":187,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":188,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":189,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":190,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":191,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"中的一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":192,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"把"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":193,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"互"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":194,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"斥"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":195,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":196,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":197,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":198,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"保证"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":199,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"同一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":200,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"时刻"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":201,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"只有一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":202,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":203,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"可以"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":204,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":205,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":206,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":207,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":208,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":209,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":210,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"从而"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":211,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"简"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":212,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"化了"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":213,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"内存"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":214,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"管理"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":215,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"但"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":216,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"限制了"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":217,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"多"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":218,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":219,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":220,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"并行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":221,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"性"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":222,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":223,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"用户"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":224,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"要求"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":225,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\""}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":226,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"一句话"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":227,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":228,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"所以"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":229,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"应该"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":230,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"尽量"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":231,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"简洁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":232,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"但"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":233,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"包含"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":234,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"核心"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":235,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"信息"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":236,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":237,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"最"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":238,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"精炼"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":239,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":240,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"：\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":241,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\""}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":242,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":243,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":244,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"（"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":245,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全局"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":246,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":247,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":248,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":249,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"）"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":250,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":251,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" C"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":252,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":253,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":254,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":255,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":256,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"中的一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":257,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"把"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":258,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"互"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":259,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"斥"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":260,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":261,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":262,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":263,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"确保"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":264,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"同一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":265,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"时刻"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":266,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"只有一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":267,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":268,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"在执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":269,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":270,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":271,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":272,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":273,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\""}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":274,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":275,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"或者"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":276,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"：\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":277,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\""}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":278,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":279,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":280,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"的"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":281,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" G"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":282,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"IL"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":283,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":284,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"是"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":285,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" C"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":286,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":287,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":288,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"解释"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":289,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"器"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":290,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"中的一"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":291,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"把"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":292,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"全局"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":293,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"互"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":294,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"斥"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":295,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"锁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":296,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"，"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":297,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"它"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":298,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"限制"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":299,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"任何"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":300,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"时刻"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":301,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"只有一个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":302,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"线程"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":303,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"能"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":304,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"执行"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":305,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" Python"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":306,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":" "}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":307,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"字节"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":308,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"码"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":309,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。\""}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":310,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"\n\n"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":311,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"这个"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":312,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"定义"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":313,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"准确"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":314,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"且"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":315,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"简洁"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":316,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"delta":"。"}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","sequence_number":317,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"text":"用户要求用一句话说明 Python 的 GIL 是什么。\n\nGIL（Global Interpreter Lock，全局解释器锁）是 Python 解释器（特别是 CPython）中的一个机制，它确保同一时刻只有一个线程在执行 Python 字节码。\n\n关键点：\n- 全称：Global Interpreter Lock\n- 作用：防止多线程同时执行 Python 字节码\n- 影响：使得多线程在 CPU 密集型任务上无法真正并行执行\n- 适用：主要针对 CPython 实现\n\n我需要用一句话简洁准确地描述它。\n\n可能的表述：\n1. GIL 是 CPython 解释器中的全局解释器锁，它确保同一时刻只有一个线程能执行 Python 字节码。\n2. GIL 是 Python 解释器的一把全局锁，它限制任何时刻仅有一个线程在执行字节码。\n3. Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它保证同一时刻只有一个线程可以执行 Python 字节码，从而简化了内存管理但限制了多线程的并行性。\n\n用户要求\"一句话\"，所以应该尽量简洁但包含核心信息。\n\n最精炼的：\n\"GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。\"\n\n或者：\n\"Python 的 GIL 是 CPython 解释器中的一把全局互斥锁，它限制任何时刻只有一个线程能执行 Python 字节码。\"\n\n这个定义准确且简洁。"}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","sequence_number":318,"item_id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","output_index":0,"summary_index":0,"part":{"text":"用户要求用一句话说明 Python 的 GIL 是什么。\n\nGIL（Global Interpreter Lock，全局解释器锁）是 Python 解释器（特别是 CPython）中的一个机制，它确保同一时刻只有一个线程在执行 Python 字节码。\n\n关键点：\n- 全称：Global Interpreter Lock\n- 作用：防止多线程同时执行 Python 字节码\n- 影响：使得多线程在 CPU 密集型任务上无法真正并行执行\n- 适用：主要针对 CPython 实现\n\n我需要用一句话简洁准确地描述它。\n\n可能的表述：\n1. GIL 是 CPython 解释器中的全局解释器锁，它确保同一时刻只有一个线程能执行 Python 字节码。\n2. GIL 是 Python 解释器的一把全局锁，它限制任何时刻仅有一个线程在执行字节码。\n3. Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它保证同一时刻只有一个线程可以执行 Python 字节码，从而简化了内存管理但限制了多线程的并行性。\n\n用户要求\"一句话\"，所以应该尽量简洁但包含核心信息。\n\n最精炼的：\n\"GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。\"\n\n或者：\n\"Python 的 GIL 是 CPython 解释器中的一把全局互斥锁，它限制任何时刻只有一个线程能执行 Python 字节码。\"\n\n这个定义准确且简洁。","type":"summary_text"}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":319,"output_index":0,"item":{"type":"reasoning","id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","status":"completed","summary":[{"type":"summary_text","text":"用户要求用一句话说明 Python 的 GIL 是什么。\n\nGIL（Global Interpreter Lock，全局解释器锁）是 Python 解释器（特别是 CPython）中的一个机制，它确保同一时刻只有一个线程在执行 Python 字节码。\n\n关键点：\n- 全称：Global Interpreter Lock\n- 作用：防止多线程同时执行 Python 字节码\n- 影响：使得多线程在 CPU 密集型任务上无法真正并行执行\n- 适用：主要针对 CPython 实现\n\n我需要用一句话简洁准确地描述它。\n\n可能的表述：\n1. GIL 是 CPython 解释器中的全局解释器锁，它确保同一时刻只有一个线程能执行 Python 字节码。\n2. GIL 是 Python 解释器的一把全局锁，它限制任何时刻仅有一个线程在执行字节码。\n3. Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它保证同一时刻只有一个线程可以执行 Python 字节码，从而简化了内存管理但限制了多线程的并行性。\n\n用户要求\"一句话\"，所以应该尽量简洁但包含核心信息。\n\n最精炼的：\n\"GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。\"\n\n或者：\n\"Python 的 GIL 是 CPython 解释器中的一把全局互斥锁，它限制任何时刻只有一个线程能执行 Python 字节码。\"\n\n这个定义准确且简洁。"}]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":320,"output_index":1,"item":{"type":"message","id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","status":"in_progress","role":"assistant","content":[]}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":321,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":322,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"Python","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":323,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":" ","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":324,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"的","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":325,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":" G","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":326,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"IL","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":327,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"（","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":328,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"全局","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":329,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"解释","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":330,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"器","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":331,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"锁","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":332,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"）","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":333,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"是","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":334,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":" C","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":335,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"Python","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":336,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":" ","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":337,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"解释","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":338,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"器","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":339,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"中的一","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":340,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"把","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":341,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"互","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":342,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"斥","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":343,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"锁","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":344,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"，","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":345,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"它","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":346,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"确保","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":347,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"同一","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":348,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"时刻","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":349,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"只有一个","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":350,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"线程","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":351,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"在执行","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":352,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":" Python","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":353,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":" ","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":354,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"字节","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":355,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"码","logprobs":[]}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":356,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"delta":"。","logprobs":[]}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","sequence_number":357,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"text":"Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。","logprobs":[]}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","sequence_number":358,"item_id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","output_index":1,"content_index":0,"part":{"type":"output_text","text":"Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。","annotations":[]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":359,"output_index":1,"item":{"type":"message","id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。","annotations":[]}]}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":360,"response":{"id":"resp_6ae364703bd0f5bbe54e53d8","object":"response","created_at":1793287281,"completed_at":1793287288,"status":"completed","error":null,"incomplete_details":null,"output":[{"type":"reasoning","id":"rs_nUxi9B8l1s14PSGmpq8vFtZ0","status":"completed","summary":[{"type":"summary_text","text":"用户要求用一句话说明 Python 的 GIL 是什么。\n\nGIL（Global Interpreter Lock，全局解释器锁）是 Python 解释器（特别是 CPython）中的一个机制，它确保同一时刻只有一个线程在执行 Python 字节码。\n\n关键点：\n- 全称：Global Interpreter Lock\n- 作用：防止多线程同时执行 Python 字节码\n- 影响：使得多线程在 CPU 密集型任务上无法真正并行执行\n- 适用：主要针对 CPython 实现\n\n我需要用一句话简洁准确地描述它。\n\n可能的表述：\n1. GIL 是 CPython 解释器中的全局解释器锁，它确保同一时刻只有一个线程能执行 Python 字节码。\n2. GIL 是 Python 解释器的一把全局锁，它限制任何时刻仅有一个线程在执行字节码。\n3. Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它保证同一时刻只有一个线程可以执行 Python 字节码，从而简化了内存管理但限制了多线程的并行性。\n\n用户要求\"一句话\"，所以应该尽量简洁但包含核心信息。\n\n最精炼的：\n\"GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。\"\n\n或者：\n\"Python 的 GIL 是 CPython 解释器中的一把全局互斥锁，它限制任何时刻只有一个线程能执行 Python 字节码。\"\n\n这个定义准确且简洁。"}]},{"type":"message","id":"msg_DEtYjTr8xf1I2vOkEwn1VH95","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Python 的 GIL（全局解释器锁）是 CPython 解释器中的一把互斥锁，它确保同一时刻只有一个线程在执行 Python 字节码。","annotations":[]}]}],"usage":{"input_tokens":18,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":18},"output_tokens":351,"output_tokens_details":{"reasoning_tokens":314},"total_tokens":369},"store":false,"background":false,"previous_response_id":null,"conversation":null,"instructions":null,"reasoning":null,"text":{"format":{"type":"text"}},"tools":[],"tool_choice":"auto","parallel_tool_calls":true,"max_output_tokens":null,"max_tool_calls":null,"metadata":null,"model":"kimi-k2.6","temperature":1,"top_p":0.95,"presence_penalty":0,"frequency_penalty":0,"top_logprobs":0,"truncation":"disabled","prompt_cache_key":null,"safety_identifier":null,"service_tier":"default"}}
+

@@ -1,0 +1,11 @@
+{
+  "model": "kimi-k2.6",
+  "max_tokens": 1024,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "用一句话说明 Python 的 GIL 是什么。"
+    }
+  ]
+}
