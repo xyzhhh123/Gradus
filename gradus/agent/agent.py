@@ -200,7 +200,8 @@ class Agent:
     def _start(self) -> AsyncIterator[AgentEvent]:
         self._state = "running"
         self._ended = False
-        self._events = asyncio.Queue()
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._events = queue
         self._steering = PendingMessageQueue(self._steering_mode)
         self._follow_up = PendingMessageQueue(self._follow_up_mode)
 
@@ -209,13 +210,13 @@ class Agent:
             get_steering_messages=self._steering.drain,
             get_follow_up_messages=self._follow_up.drain,
         )
-        self._task = asyncio.create_task(self._pump(config))
-        return self._consume()
+        self._task = asyncio.create_task(self._pump(queue, config))
+        return self._consume(queue, self._task)
 
-    async def _pump(self, config: LoopConfig) -> None:
+    async def _pump(
+        self, queue: asyncio.Queue[Any], config: LoopConfig
+    ) -> None:
         """驱动 `run_loop`，转发事件，并把最终消息写入历史。"""
-        queue = self._events
-        assert queue is not None
 
         turn_messages: list[Message] = []
         try:
@@ -244,11 +245,9 @@ class Agent:
             self._follow_up = None
             await queue.put(_END)
 
-    async def _consume(self) -> AsyncIterator[AgentEvent]:
-        queue = self._events
-        task = self._task
-        assert queue is not None and task is not None
-
+    async def _consume(
+        self, queue: asyncio.Queue[Any], task: asyncio.Task[None]
+    ) -> AsyncIterator[AgentEvent]:
         try:
             while True:
                 item = await queue.get()
@@ -260,11 +259,20 @@ class Agent:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task
-            await self._finish_if_needed()
+            await self._finish_if_needed(queue)
 
-    async def _finish_if_needed(self) -> None:
-        """任务在启动前就被取消时，`_pump` 的 `finally` 不会执行。"""
-        if self._ended:
+    async def _finish_if_needed(
+        self, queue: asyncio.Queue[Any] | None = None
+    ) -> None:
+        """任务在启动前就被取消时，`_pump` 的 `finally` 不会执行。
+
+        `queue` 是这一次运行的队列。调用方中断消费后（例如重试前直接丢弃
+        旧迭代器），旧迭代器可能在新一次运行开始之后才被回收；此时只能
+        收尾它自己那一次运行，否则会把新一轮置回 idle 并塞进结束标记。
+        """
+        if queue is None:
+            queue = self._events
+        if queue is not self._events or self._ended:
             return
 
         self._ended = True

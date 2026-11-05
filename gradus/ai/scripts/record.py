@@ -5,8 +5,10 @@
     uv run python -m gradus.ai.scripts.record openai_compat gradus/ai/scripts/bodies/kimi-compat.json --service kimi-compat
 
 要点：
-- key 先读 `.env`（默认 Gradus 根目录，可用 `--env` 指定），文件里没有的键再从环境变量兜底
-- key 名按协议取，与选哪家服务无关：换 `--service` 时把对应厂商的 key 填进同一个变量
+- key 先读 `.env`（默认 Gradus 根目录，可用 `--env` 指定），文件里没有的键再从环境变量兜底；
+  解析在 `gradus/ai/envfile.py`，与 coding CLI 共用同一份规则
+- key 先按协议取（`OPENAI_COMPAT_API_KEY` 等），取不到再用通用 `GRADUS_API_KEY`；
+  `.env` 里一套连接只写一行 key 就够，换 `--service` 即可
 - 请求体必须是 stream=true 的真实请求；本脚本不替你编造提示词
 - 现成请求体放在 `scripts/bodies/`，文件名与 `--service` 同名（如 `kimi-compat.json`）；
   形状绑定协议，换协议要另写一份
@@ -26,10 +28,14 @@ import json
 import os
 import re
 import sys
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 
 import httpx
+
+from gradus.ai.envfile import load_env_file
+from gradus.ai.services import SERVICES
 
 BASE_URLS = {
     "openai_compat": "https://api.deepseek.com",
@@ -50,61 +56,22 @@ PROVIDERS = {
     "openai_responses": ("/responses", "OPENAI_RESPONSES_API_KEY"),
 }
 
-# 常用服务商，名字 -> (协议, 完整 URL)。只是 --url 的快捷方式，协议必须与位置参数一致。
-# 命名规则：同一家出现在多个协议下时，每个名字都带协议后缀（kimi-compat / kimi-anthropic /
-# kimi-responses），避免 `kimi` 这种看起来像"整个平台"而其实只是一种形状的名字；
-# 只有一种协议的服务保持原名（deepseek、qwen、siliconflow、ark）。
-# 国内可用的 Anthropic / Responses 兼容端点主要服务 Claude Code 一类工具，
-# 可能不返回 thinking / signature，录样本时以状态码正常为准。
-SERVICES = {
-    # openai_compat：Chat Completions 形状
-    "deepseek": ("openai_compat", "https://api.deepseek.com/chat/completions"),
-    "kimi-compat": ("openai_compat", "https://api.moonshot.cn/v1/chat/completions"),
-    "zhipu-compat": (
-        "openai_compat",
-        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    ),
-    "qwen": (
-        "openai_compat",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-    ),
-    "siliconflow": ("openai_compat", "https://api.siliconflow.cn/v1/chat/completions"),
-    # 火山方舟的 model 要填控制台里创建的接入点 ID
-    "ark": ("openai_compat", "https://ark.cn-beijing.volces.com/api/v3/chat/completions"),
-    # anthropic：Messages 形状
-    "anthropic": ("anthropic", "https://api.anthropic.com/v1/messages"),
-    # 国内 Kimi 平台（platform.kimi.com）三种协议都在 api.moonshot.cn 上
-    "kimi-anthropic": ("anthropic", "https://api.moonshot.cn/anthropic/v1/messages"),
-    "zhipu-anthropic": ("anthropic", "https://open.bigmodel.cn/api/anthropic/v1/messages"),
-    # openai_responses：Responses 形状
-    "openai": ("openai_responses", "https://api.openai.com/v1/responses"),
-    "kimi-responses": ("openai_responses", "https://api.moonshot.cn/v1/responses"),
-}
+# 常用服务商的快捷名来自 `gradus.ai.services`，与 coding CLI 共用一张表。
+# 这里只在 `--service` 时取它的 base_url，再拼上本协议的路径。
+
+#: 通用 key：与 `coding/config.py` 的 `GRADUS_API_KEY` 同名（层间不互相 import，
+#: 这里写字面量）。`.env` 里一套连接只写这一行，按协议的 key 仍然优先。
+GENERIC_KEY = "GRADUS_API_KEY"
 
 
-def load_env_file(path: Path) -> None:
-    """用 `.env` 覆盖同名变量，文件里没有的键保持原样。
-
-    `.env` 优先，是为了让项目自带的配置盖过机器上残留的同名变量；
-    空值视为未配置，避免一行 `KEY=` 把本来存在的环境变量顶掉。
-    支持 `KEY=VALUE`、`export KEY=VALUE`、单双引号包裹和 `#` 注释行。
-    不引入 python-dotenv，避免为一个脚本加依赖。
-    """
-    if not path.exists():
-        return
-
-    for raw in path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :]
-        key, sep, value = line.partition("=")
-        if not sep:
-            continue
-        value = value.strip().strip("\"'")
+def resolve_key(env: Mapping[str, str], provider: str) -> tuple[str, str]:
+    """按协议 key 取，取不到再退回通用 key；返回 (key, 实际命中的变量名)。"""
+    _, protocol_key = PROVIDERS[provider]
+    for name in (protocol_key, GENERIC_KEY):
+        value = env.get(name, "").strip()
         if value:
-            os.environ[key.strip()] = value
+            return value, name
+    return "", protocol_key
 
 
 def build_headers(provider: str, api_key: str) -> dict[str, str]:
@@ -130,10 +97,11 @@ def resolve_url(provider: str, service: str | None, override: str | None) -> str
     if override:
         return override
     if service:
-        target, url = SERVICES[service]
+        target, base = SERVICES[service]
         if target != provider:
             raise SystemExit(f"{service} 是 {target} 的服务，与位置参数 {provider} 不匹配")
-        return url
+        path, _ = PROVIDERS[provider]
+        return f"{base.rstrip('/')}{path}"
     path, _ = PROVIDERS[provider]
     if not path:
         raise SystemExit("gemini 的端点带模型名，请用 --url 指定完整地址")
@@ -202,10 +170,13 @@ def main() -> int:
 
     load_env_file(Path(args.env))
 
-    _, key_env = PROVIDERS[args.provider]
-    api_key = os.environ.get(key_env, "")
+    api_key, key_env = resolve_key(os.environ, args.provider)
     if not api_key:
-        print(f"缺少 {key_env}：既不在环境变量里，也不在 {Path(args.env).resolve()} 里", file=sys.stderr)
+        print(
+            f"缺少 {key_env}（或通用 {GENERIC_KEY}）："
+            f"既不在环境变量里，也不在 {Path(args.env).resolve()} 里",
+            file=sys.stderr,
+        )
         return 1
 
     body_path = Path(args.body)

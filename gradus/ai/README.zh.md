@@ -158,6 +158,8 @@ gradus/ai/
 ├── base.py                     # 对外接口：Request、ModelSpec、ToolSpec、Provider 协议
 ├── stream_assembler.py         # 共用装配器：块开关、partial 快照、content_index 分配
 ├── transport.py                # 传输层：POST、SSE 解析、重试、失败归一
+├── envfile.py                  # `.env` 解析：文件优先、空值跳过；record.py 与 coding CLI 共用
+├── services.py                 # 内置服务商表：名字 -> (协议, base_url)；record.py 与 coding CLI 共用
 ├── ai_plan.md                  # 里程碑、进度检查、偏差记录
 ├── docs/
 │   ├── design.md                 # 实现说明：逐文件的协议映射与取舍
@@ -195,6 +197,8 @@ gradus/ai/
 | `base.py` | 请求侧类型与 `Provider` 契约 | 写契约的实现 |
 | `stream_assembler.py` | 把内容增量变成事件 | 出现任何厂商字段名 |
 | `transport.py` | 网络 I/O 与 SSE 切分 | 认识任何厂商字段、知道 12 个事件 |
+| `envfile.py` | 把 `.env` 读进 `os.environ`（文件优先、空值跳过） | 展开变量、碰网络或协议、import `gradus.coding` |
+| `services.py` | 服务商名到 `(协议, base_url)` 的映射 | 放请求逻辑、凭证或厂商字段解析 |
 | `providers/*` | 厂商线上格式 <-> 内部协议 | 自己累积消息状态、自造事件 |
 | `tests/*` | 断言事件序列与终止路径 | 联网、为迁就实现而改断言 |
 | `tests/adapter.py` | 把各文件的用例汇总成一个可执行入口 | 写断言、导入任何 `gradus` 模块 |

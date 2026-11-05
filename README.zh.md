@@ -2,36 +2,99 @@
 
 [English](README.md)
 
-分层的 Agent 运行时。模型协议、控制循环、产品装配各归一层，依赖只能向下：
+**分层的 Coding Agent 运行时。** Gradus 把模型的流式输出变成能调用工具的会话，并给每个会话一份私有 workspace 副本，会话结束时再合回宿主。
+
+## 特性
+
+- **四种模型协议，一套内部形状** —— Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini 统一成一套消息模型与 12 个流式事件。
+- **真正可控的工具循环** —— 单层异步循环、9 个 hook、8 个运行级事件、并行工具、`steer` / `follow_up`、取消与重试。
+- **沙箱执行** —— `appcontainer`（Windows 零安装）/ `docker` / `local`；每个会话操作私有副本，新增、修改、删除在关闭时合回宿主。
+- **MCP 与扩展** —— 项目级 MCP server（显式信任 + OAuth），以及从 `.gradus/` 加载的 Python 工具、斜杠命令与 `SKILL.md` 技能。
+- **Codemode** —— 模型写 Python 调用 `tools.*`，只有 `text()` / `return` 的结果进入上下文。
+- **会话与上下文** —— JSONL 历史、断点恢复、token 预算与自动压缩。
+
+## 架构
 
 ```
-gradus/coding   ->   gradus/agent   ->   gradus/ai
+gradus/coding    产品层   配置、会话、工具、权限、沙箱、CLI
+      |
+gradus/agent     控制层   循环、hook、并行工具、Agent 门面
+      |
+gradus/ai        协议层   Provider、流式事件、传输
 ```
 
-- **`ai`**：把 Anthropic、OpenAI Chat、OpenAI Responses、Gemini 统一成一套内部协议——1 种消息形状 + 12 个流式事件。
-- **`agent`**：把一次补全变成一次带工具的任务。单层异步循环、9 个控制 hook、8 个运行级事件、并行工具、`steer` / `follow_up`、连接池生命周期。
-- **`coding`**：产品装配层，读配置、建会话、实现具体工具、权限与 CLI。目前只有目录骨架。
+依赖只能向下。`ai` 不 import `agent` / `coding`，`agent` 不 import `coding`。
 
 ## 当前状态
 
-| 层 | 内容 | 测试 |
+| 层 | 内容 | 用例数 |
 | --- | --- | --- |
-| `ai` | 4 个厂商适配器 + fake，全异步 | 126 |
-| `agent` | 循环、hook、并行工具、消息队列、`Agent` 门面 | 89 |
-| `coding` | 目录与职责说明，尚未实现 | — |
+| `ai` | 4 个厂商适配器 + fake，全异步 | 130 |
+| `agent` | 循环、hook、并行工具、消息队列、`Agent` 门面 | 90 |
+| `coding` | 配置、会话、工具、权限、MCP、扩展、codemode、沙箱、CLI | 380 |
 
-合计 215 passed。Python 3.13，运行依赖 `httpx` 与 `jsonschema`，用 `uv` 管理环境。
+共收集 600 个用例：离线 589 个通过；11 个沙箱实机契约默认跳过，需要 `GRADUS_SANDBOX_LIVE=1`。
+
+Python 3.13 · 运行依赖：`httpx`、`httpx2`、`jsonschema`、`mcp` · 环境用 `uv` 管理。
 
 ## 快速开始
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/xyzhhh123/Gradus.git
 cd Gradus
 uv sync
 uv run pytest -q
 ```
 
-离线跑通一次完整循环（不联网、不需要 key）：
+### 跑 CLI
+
+在 `<workspace>/.env` 里写一套连接：
+
+```ini
+GRADUS_SERVICE=kimi-compat
+GRADUS_MODEL=kimi-k2.7-code
+GRADUS_API_KEY=sk-...
+```
+
+```bash
+uv run gradus                      # workspace 为当前目录
+uv run gradus --workspace ../app   # 或指定其它目录
+uv run gradus --sandbox docker     # auto -> appcontainer -> docker -> local
+```
+
+单靠一个 key 认不出服务商，所以服务、模型、key 要放在一起配。优先级：命令行参数 > `.env` > `~/.gradus/config.json`。
+
+| 参数 | 用途 |
+| --- | --- |
+| `--workspace` | 工具与命令的根目录（缺省为当前目录） |
+| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` |
+| `--service` / `--provider` / `--model` / `--base-url` | 覆盖连接配置 |
+| `--resume` / `--session-dir` | 恢复 JSONL 会话，或指定新会话目录 |
+| `--mcp` / `--config` | 指定 MCP 与配置文件路径 |
+| `--untrust [路径]` | 撤销项目的 MCP 信任后退出 |
+| `--reset-sandbox` | 清理孤儿副本、AppContainer 授权与 profile |
+| `--log` | 把工具与错误事件追加写入 JSONL |
+
+交互模式里：`/reload` 重载工具与扩展，`/命令` 与 `/skill:名字` 展开保存的提示词，`exit` / `Ctrl-D` 退出。
+
+## 沙箱
+
+| 后端 | 何时使用 | 边界 |
+| --- | --- | --- |
+| `appcontainer` | Windows，可用时优先 | AppContainer 令牌、默认断网、Job Object 连带杀子进程 |
+| `docker` | Docker 引擎可用 | 容器内执行，`--network none`，限制内存 / CPU / 进程数 |
+| `local` | 兜底 | 无；命令以当前用户权限直接执行 |
+
+沙箱会话不会直接改你的 workspace：它先拿到一份私有副本——git 仓库根走 `git worktree`，其余走过滤后的整树复制——文件工具和命令都在这份副本上工作。关闭时写回新增与修改、执行删除；合并失败会保留副本并打印路径。强杀留下的副本会在下次启动时清理。
+
+两条边界需要说清楚：
+
+- **命令审批不会关掉。** 副本防的是误伤宿主，不等于任意命令都安全。
+- **MCP server 进程不在沙箱里。** 它以宿主用户权限运行；stdio server 的缺省 `cwd` 会指到副本，让相对路径对齐，但 HTTP server 与绝对路径仍然直接落到宿主。
+
+## Python API
+
+离线跑通一次完整循环——不联网、不需要 key：
 
 ```python
 import asyncio
@@ -69,7 +132,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## 接入真实模型
+接真实模型时用有状态的 `Agent` 门面：
 
 ```python
 from gradus.agent.agent import Agent
@@ -84,7 +147,11 @@ spec = ModelSpec(
     max_output_tokens=8192,
 )
 
-agent = await Agent.connect(spec, LoopConfig(system="你是一个助手"), api_key="sk-...")
+agent = await Agent.connect(
+    spec,
+    LoopConfig(system="你是一个助手"),
+    api_key="sk-...",
+)
 try:
     async for event in agent.prompt("你好"):
         ...
@@ -92,32 +159,34 @@ finally:
     await agent.aclose()
 ```
 
-`Agent.connect()` 会建一个 `httpx.AsyncClient` 并在多次运行间复用它，`aclose()` 负责关闭。想多个 Agent 共用连接池，就把同一个 `client` 传给每个 `connect()`。
+`Agent.connect()` 建一个 `httpx.AsyncClient` 并在多次运行间复用，`aclose()` 负责关闭；想多个 Agent 共用连接池，把同一个 `client` 传给每个 `connect()`。
 
 ## 目录
 
 ```
 Gradus/
 ├── gradus/
-│   ├── ai/        # Provider、内部协议、事件、传输
-│   ├── agent/     # 循环、工具运行时、hook、有状态 Agent
-│   └── coding/    # 产品装配（骨架）
+│   ├── ai/          # Provider、内部协议、流式事件、传输
+│   ├── agent/       # 循环、hook、工具运行时、有状态 Agent
+│   └── coding/      # 配置、会话、工具、权限、沙箱、MCP、CLI
 ├── pyproject.toml
 └── uv.lock
 ```
 
 ## 文档
 
-- `ai`：[README](gradus/ai/README.zh.md) · [设计](gradus/ai/docs/design.md) · [计划](gradus/ai/ai_plan.md)
-- `agent`：[README](gradus/agent/README.zh.md) · [设计](gradus/agent/docs/design.md) · [计划](gradus/agent/agent_plan.md)
-- `coding`：[README](gradus/coding/README.zh.md) · [设计](gradus/coding/docs/design.md) · [计划](gradus/coding/coding_plan.md)
+| 层 | README | 设计 | 计划 |
+| --- | --- | --- | --- |
+| `ai` | [README](gradus/ai/README.zh.md) | [设计](gradus/ai/docs/design.md) | [计划](gradus/ai/ai_plan.md) |
+| `agent` | [README](gradus/agent/README.zh.md) | [设计](gradus/agent/docs/design.md) | [计划](gradus/agent/agent_plan.md) |
+| `coding` | [README](gradus/coding/README.zh.md) | [设计](gradus/coding/docs/design.md) | [计划](gradus/coding/coding_plan.md) |
 
 ## 设计原则
 
 1. **单向依赖**：上层可以调用下层，下层对上层完全不可见。`ai` 不 import `agent` / `coding`，`agent` 不 import `coding`。
-2. **事件驱动**：`ai` 的 12 个事件被 `agent` 原样透传，`agent` 只补充运行级事件。
+2. **事件就是接口**：`ai` 的 12 个事件被 `agent` 原样透传，`agent` 只补充运行级事件。
 3. **全链路异步**：`Provider.stream()`、`run_loop()`、`AgentTool.execute()` 都是异步的，循环内不做阻塞 I/O。
-4. **工具由上层实现**：`agent` 只定义 `AgentTool` 协议，读写文件、执行命令都在 `coding`。
+4. **工具由上层实现**：`agent` 只定义 `AgentTool` 协议，文件、搜索、命令的实现都在 `coding`。
 
 ## 致谢
 

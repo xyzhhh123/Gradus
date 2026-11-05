@@ -41,6 +41,25 @@ README 讲这一层对外是什么形状；这里讲每个文件内部怎么做�
 `httpx.AsyncClient` 即可共享连接池，注入的 client 由调用方关闭。不注入时每次 `post_sse`
 自建一个并在结束时 `aclose()`。明确不做：代理认证、HTTP/2 调优、按厂商分级重试。
 
+### `envfile.py`
+
+一个函数：`load_env_file(path)` 把 `.env` 里的键写进 `os.environ`。规则是 **文件优先**
+（同名变量被文件覆盖）、空值跳过、去两侧引号、按 `utf-8-sig` 读（兼容 BOM）、不展开变量、
+不处理多行值。
+
+放在 `ai` 而不是 `coding`：调用方是 `scripts/record.py`（在 `ai`）与 coding CLI，而依赖方向
+只允许 `coding -> ai`；放 `coding` 会让 `ai` 反向依赖。本模块不碰网络、不碰协议。
+
+### `services.py`
+
+一张表 `SERVICES`：服务商名 -> `(协议, base_url)`。`coding` 用它把配置里的 `service`
+展开成 `provider` + `base_url`；`scripts/record.py` 用它拼录制端点（`base_url` + 协议路径）。
+同名的服务商出现在多个协议下时带协议后缀（`kimi-compat` / `kimi-anthropic` /
+`kimi-responses`），避免「一家平台」的误解。`gemini` 的端点里带模型名，不在这张表里。
+
+放在 `ai` 的理由与 `envfile.py` 相同：`record.py` 在 `ai` 内，依赖方向只允许
+`coding -> ai`，两边共用一张表才不会各写一份。
+
 ### `providers/__init__.py`
 
 上层唯一的构造入口 `create_provider(spec, api_key, client=None) -> Provider`：按 `spec.provider`
@@ -316,7 +335,7 @@ SSE 解析的 9 条断言（单条记录、多行 data、注释与未知字段�
 
 | 命令 | 用途 |
 | --- | --- |
-| `uv run python -m gradus.ai.scripts.record <provider> <body.json> [--out 路径]` | 按 provider 拼端点与鉴权头；key 先读 `.env`（默认 `./.env`，可用 `--env` 指定），文件里没有的再从环境变量兜底；输出默认命名为 `scripts/recorded/<协议>_<模型>_<时间戳>.sse`，也可用 `--out` 指定；边收边写 `.tmp`，成功后再改名，避免留下半截样本 |
+| `uv run python -m gradus.ai.scripts.record <provider> <body.json> [--out 路径]` | 按 provider 拼端点与鉴权头；key 先读 `.env`（默认 `./.env`，可用 `--env` 指定），文件里没有的再从环境变量兜底；`.env` 解析在 `gradus/ai/envfile.py`，与 coding CLI 共用同一份规则（文件优先、空值跳过）；输出默认命名为 `scripts/recorded/<协议>_<模型>_<时间戳>.sse`，也可用 `--out` 指定；边收边写 `.tmp`，成功后再改名，避免留下半截样本 |
 | `uv run python -m gradus.ai.scripts.replay <provider> <fixture>` | 读 fixture → `parse_sse()` → 顶掉适配器的 `post_sse` → 打印 12 种事件与最终消息 |
 
 `record` 的两个约定：请求体必须自己提供（且 `stream` 为 `true`），`scripts/bodies/` 里存着现成的，文件名与对应的 `--service` 同名（如 `kimi-compat.json`）；Gemini 必须用 `--url` 指定带模型名的完整地址。非 200、连接失败时打印原因并退出，不写文件。

@@ -214,7 +214,7 @@ M7 验收：
 | --- | --- | --- |
 | `ai/base.py` + providers | Provider 可选注入长活 client（AG-12）；Anthropic 显式缓存断点；`prompt_cache_key` 透传 | A / B 已完成（ai 的 D29 / D30）；C 待稳定会话 id；agent 侧接入已完成（D18） |
 | `ai/types.py` | 工具结果支持图片 / 结构化内容（AG-19） | 暂缓：需先做模型能力判断 |
-| `coding` | 见 [coding_plan.md](../coding/coding_plan.md) 的「待办清单」 | 未开始 |
+| `coding` | 见 [coding_plan.md](../coding/coding_plan.md) 的「里程碑」 | 未开始 |
 
 ### M5–M7 不做的事
 

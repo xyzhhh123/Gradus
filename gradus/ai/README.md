@@ -160,6 +160,8 @@ gradus/ai/
 ├── base.py                     # public interface: Request, ModelSpec, ToolSpec, Provider protocol
 ├── stream_assembler.py         # shared assembler: blocks, partial snapshots, content_index
 ├── transport.py                # transport: POST, SSE parsing, retries, failure mapping
+├── envfile.py                  # `.env` parsing: file wins, blanks skipped; shared with the coding CLI
+├── services.py                 # built-in services: name -> (protocol, base_url); shared with the coding CLI
 ├── ai_plan.md                  # milestones, progress checks, deviation log
 ├── docs/
 │   ├── design.md                 # per-file notes (Chinese): vendor mappings and trade-offs
@@ -197,6 +199,8 @@ gradus/ai/
 | `base.py` | Request-side types and the `Provider` contract | contain the implementation of that contract |
 | `stream_assembler.py` | Turning content increments into events | mention any vendor field name |
 | `transport.py` | Network I/O and SSE splitting | know any vendor field or the 12 events |
+| `envfile.py` | Reading `.env` into `os.environ` (file wins, blanks skipped) | expand variables, touch the network or the protocol, import `gradus.coding` |
+| `services.py` | Name -> `(protocol, base_url)` mapping for common services | hold request logic, credentials, or vendor field parsing |
 | `providers/*` | Vendor wire format <-> internal protocol | accumulate message state or define new events |
 | `tests/*` | Assert event sequences and termination paths | touch the network or bend assertions to fit the implementation |
 | `tests/adapter.py` | Gather every file's cases into one runnable entry | hold assertions or import any `gradus` module |

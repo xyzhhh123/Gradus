@@ -66,6 +66,30 @@ class AgentTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(agent.messages[2], AssistantMessage)
         self.assertEqual(len(provider.requests[1].messages), 2)
 
+    async def test_retry_after_error_starts_a_clean_run(self):
+        provider = make_provider(
+            {"name": "fail", "steps": [{"kind": "error", "message": "boom"}]},
+            text_script("recovered"),
+        )
+        agent = Agent(provider, LoopConfig(system=""))
+
+        events = agent.prompt("hi")
+        first: list[Any] = []
+        async for event in events:
+            first.append(event)
+            if isinstance(event, AgentError):
+                break
+
+        self.assertIsInstance(first[-1], AgentError)
+
+        # 模拟 session 的重试：丢弃旧迭代器，直接开新一轮
+        events = agent.continue_()
+        await asyncio.sleep(0.01)
+        second = await drain(events)
+
+        self.assertIsInstance(second[-1], AgentDone)
+        self.assertEqual(agent.state, "idle")
+
     async def test_reset_clears_history(self):
         provider = make_provider(text_script("one"))
         agent = Agent(provider, LoopConfig(system=""))

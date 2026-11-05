@@ -92,7 +92,7 @@ agent 层     ->  base.py / types.py
   `openai_responses` 解析 reasoning（D22）；`is_error` 从 `Error: ` 前缀改为 `{"error": ...}`（D19 修订）
 - M9 回放框架：`tests/fixtures/*.sse` 存原始流，`tests/test_replay.py` 走
   「文件 → `parse_sse` → 适配器」的真实链路；先用一条手写样本跑通，等真实流回填。
-  配套两个手动脚本：`scripts/record.py` 录制（key 只读环境变量）、`scripts/replay.py` 打印事件
+  配套两个手动脚本：`scripts/record.py` 录制（key 先读 `.env`，再兜底环境变量，解析在 `ai/envfile.py` 并与 CLI 共用；key 先按协议名取 `OPENAI_COMPAT_API_KEY` 等，取不到再用通用 `GRADUS_API_KEY`）、`scripts/replay.py` 打印事件
 - 思考强度：`base.py` 新增 `ReasoningLevel`（minimal / low / medium / high）与 `THINKING_BUDGETS`，
   `Request.reasoning` 默认 `None`；四个适配器各翻译一次——`reasoning_effort`（Chat Completions）、
   `thinking.budget_tokens` 并把 `max_tokens` 抬到预算之上（Messages）、`thinkingConfig`
@@ -122,9 +122,9 @@ agent 层     ->  base.py / types.py
   空 data 交付、无 data 记录跳过、`[DONE]` 原样、冒号后只剥一个空格
 - 传输：正常流派、429 后重试成功（2 次调用）、401 不重试、连接失败重试用尽（3 次调用）、
   非 UTF-8 字节不抛异常
-- `uv run python -m gradus.ai.tests.adapter`：126 passed
+- `uv run python -m gradus.ai.tests.adapter`：130 passed
   （anthropic 23 + fake 7 + gemini 20 + openai_compat 30 + openai_responses 21 +
-  replay 10 + transport 14 + factory 1）
+  record 4 + replay 10 + transport 14 + factory 1）
 - 缓存断点：system / 最后一个工具 / 最后一条消息各一个，`thinking` 跳过，总数 3；
   离线只验证形状，真实命中率待官方 key
 - client 注入：四种协议连续两次 `stream()` 都走注入的 client，结束后未被关闭；不注入时行为不变
@@ -197,6 +197,8 @@ agent 层     ->  base.py / types.py
 | D28 | 整条链路是同步迭代器 | 改为异步：`Provider.stream()` 返回 `AsyncIterator`，`post_sse` 用 `httpx.AsyncClient`，退避用 `await asyncio.sleep`；`CancelledError` 是唯一允许穿透的异常 | 保留：用户目标是多用户，等 `agent` 写完再改等于重写。一次性改到底、不留同步分支。`parse_sse` 只服务 fixture 与回放，仍同步；两个入口共用 `_SseParser`，切分规则只有一份。`client` 可注入且由调用方关闭，但适配器还没有接收 client 的入口，等 `agent` 有会话生命周期时再接（见「未覆盖」）。代价：工具执行器、UI 消费端都必须是 async；测试改成 `StreamTestCase`（`unittest.IsolatedAsyncioTestCase`）+ `async def test_*`，用 `consume()` 边收边断言、不先收集成列表，不引入 `pytest-asyncio` |
 | D29 | 四个适配器只接 `(spec, api_key)`，每次 `stream()` 自建并关闭 `AsyncClient`；D28 却写了"上层能共享连接池"，实际没有入口 | `create_provider(spec, api_key="", client=None)`；四个适配器构造函数同样加可选 `client`，`stream()` 透传给 `post_sse` | 保留：注入的 client 由调用方关闭，`None` 时保持原行为（`post_sse` 自建并 `aclose`）。`httpx` 只出现在 `providers/*` 与 `transport.py`，`base.py` 不 import。新增 `test_provider_factory.py`：四种协议各注入一个 `MockTransport` client，连续两次 `stream()` 都命中它，结束后 `is_closed` 仍为 `False` |
 | D30 | Anthropic 从未发 `cache_control`，官方端点命中率恒为 0（Kimi 兼容口自动缓存掩盖了问题） | `system` 改成 text 块数组并在末尾打点；最后一个 tool 打点；最后一条消息的最后一个可缓存块打点 | 保留：前缀按 tools → system → messages 累积，三处都打在段末，最多 3 个（官方上限 4）。可显式标记的类型是 text / tool_use / tool_result；`thinking` 不能带，遇到往回找（交接里担心的 `tool_result` 实际是支持的）。最小可缓存长度 1024（Sonnet 4.5）/ 2048（Sonnet 4.6、Haiku），短会话不命中属正常。真实命中率待官方 key；Kimi 兼容口是否接受块数组待冒烟，不认则按端点回退字符串 system |
+| D31 | `.env` 解析只属于 `coding`（"coding 是唯一读环境变量的层"） | `scripts/record.py` 也要读 `.env`，它在 `ai` 内，而 `ai` 不能反向 import `coding`；两边共用一份实现只能落在 `ai` 侧 | 保留：新增 `ai/envfile.py`（只把文件读进 `os.environ`，不碰网络与协议），`coding` CLI 从 `ai` 引用。曾短暂放在 `gradus/` 根下，因脱离 `ai` / `agent` / `coding` 三层被否。代价：`ai/README` 里要写明这条职责，`coding` 的"唯一读环境变量"改成"库代码中唯一，开发脚本 `record.py` 例外" |
+| D32 | `scripts/record.py` 自带一张服务商表（名字 -> 协议 + 完整 URL），与 `coding` 的配置无关 | `coding` 要加内置 `service` 快捷名，需要同一批"名字 -> 协议 + 地址"；两边各写一份就是同一份数据存两处 | 保留：抽 `ai/services.py`，值是 `(协议, base_url)`；`record.py` 用 `base_url + 协议路径` 拼完整端点（11 条逐一核对与原来一致），`coding` 用它展开 `service`。`gemini` 端点带模型名，不进表，录制仍用 `--url` |
 
 ## 下一轮检查时要做的事
 

@@ -5,12 +5,25 @@ description = "Gradus: a layered agent runtime"
 requires-python = ">=3.13"
 dependencies = [
     "httpx>=0.28.1",
+    "httpx2>=2.16.0",
     "jsonschema>=4.26.0",
+    "mcp>=2.3.0",
 ]
+
+[project.scripts]
+gradus = "gradus.coding.cli:cli"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+namespaces = true
+include = ["gradus*"]
 
 [dependency-groups]
 dev = ["pytest>=8.3"]
 
 [tool.pytest.ini_options]
-testpaths = ["gradus/ai/tests", "gradus/agent/tests"]
+testpaths = ["gradus/ai/tests", "gradus/agent/tests", "gradus/coding/tests"]
 pythonpath = ["."]

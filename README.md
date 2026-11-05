@@ -2,36 +2,99 @@
 
 [中文](README.zh.md)
 
-A layered agent runtime. Model protocols, the control loop, and product assembly each live in their own layer, and dependencies only point downward:
+**A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a sandboxed copy of the workspace that merges back when the session ends.
+
+## Highlights
+
+- **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini all reduce to one message model plus 12 streaming events.
+- **A tool loop with real control** — one async loop, 9 hooks, 8 run-level events, parallel tool execution, `steer` / `follow_up`, cancellation, and retries.
+- **Sandboxed execution** — `appcontainer` (Windows, zero install), `docker`, or `local`; each session works on a private workspace copy, and added, edited, and deleted files merge back on close.
+- **MCP and extensions** — project-scoped MCP servers with explicit trust and OAuth, plus Python tools, slash commands, and `SKILL.md` skills loaded from `.gradus/`.
+- **Codemode** — the model writes Python that calls `tools.*`; only `text()` / `return` enters the context.
+- **Sessions and context** — JSONL history, resume, token budgeting, and automatic compaction.
+
+## Architecture
 
 ```
-gradus/coding   ->   gradus/agent   ->   gradus/ai
+gradus/coding    product layer   config, sessions, tools, permissions, sandbox, CLI
+      |
+gradus/agent     control layer   loop, hooks, parallel tools, Agent facade
+      |
+gradus/ai        protocol layer  providers, streaming events, transport
 ```
 
-- **`ai`**: unifies Anthropic, OpenAI Chat, OpenAI Responses, and Gemini into one internal protocol — one message shape plus 12 streaming events.
-- **`agent`**: turns a single completion into a tool-using task. One async loop, 9 control hooks, 8 run-level events, parallel tools, `steer` / `follow_up`, and connection-pool lifecycle.
-- **`coding`**: the product layer — config, sessions, concrete tools, permissions, and the CLI. Currently a skeleton only.
+Dependencies only point down. `ai` imports neither `agent` nor `coding`; `agent` never imports `coding`.
 
 ## Status
 
-| Layer | Contents | Tests |
+| Layer | What it contains | Tests |
 | --- | --- | --- |
-| `ai` | 4 vendor adapters + fake, fully async | 126 |
-| `agent` | loop, hooks, parallel tools, message queues, `Agent` facade | 89 |
-| `coding` | directories and responsibilities only | — |
+| `ai` | 4 vendor adapters + fake, fully async | 130 |
+| `agent` | loop, hooks, parallel tools, message queues, `Agent` facade | 90 |
+| `coding` | config, sessions, tools, permissions, MCP, extensions, codemode, sandbox, CLI | 380 |
 
-215 tests passing. Python 3.13, runtime dependencies are `httpx` and `jsonschema`, managed with `uv`.
+600 tests collected: 589 pass offline; the 11 live sandbox contract checks skip unless `GRADUS_SANDBOX_LIVE=1`.
+
+Python 3.13 · runtime dependencies: `httpx`, `httpx2`, `jsonschema`, `mcp` · managed with `uv`.
 
 ## Quick start
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/xyzhhh123/Gradus.git
 cd Gradus
 uv sync
 uv run pytest -q
 ```
 
-Run a full loop offline (no network, no API key):
+### Run the CLI
+
+Create `<workspace>/.env` with one connection block:
+
+```ini
+GRADUS_SERVICE=kimi-compat
+GRADUS_MODEL=kimi-k2.7-code
+GRADUS_API_KEY=sk-...
+```
+
+```bash
+uv run gradus                      # workspace = current directory
+uv run gradus --workspace ../app   # or point it somewhere else
+uv run gradus --sandbox docker     # auto -> appcontainer -> docker -> local
+```
+
+A key alone cannot identify a provider, so the service, model, and key are configured together. CLI flags override `.env`, which overrides `~/.gradus/config.json`.
+
+| Flag | Purpose |
+| --- | --- |
+| `--workspace` | Root for tools and commands (default: current directory) |
+| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` |
+| `--service` / `--provider` / `--model` / `--base-url` | Override the connection |
+| `--resume` / `--session-dir` | Resume a JSONL session, or choose where new ones go |
+| `--mcp` / `--config` | Explicit MCP and config file paths |
+| `--untrust [path]` | Revoke trust for a project's MCP config, then exit |
+| `--reset-sandbox` | Clear orphan copies, AppContainer grants, and the profile |
+| `--log` | Append tool and error events to a JSONL file |
+
+Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill:name` expand saved prompts, and `exit` / `Ctrl-D` leaves.
+
+## Sandbox
+
+| Backend | When it is used | Boundary |
+| --- | --- | --- |
+| `appcontainer` | Windows; the default when available | AppContainer token, no network, Job Object kills child processes |
+| `docker` | Docker engine available | Container with `--network none`, memory / CPU / PID limits |
+| `local` | Fallback | None; commands run with your user privileges |
+
+A sandbox session never edits your workspace directly. It gets a private copy — `git worktree` when the workspace is a git repository, a filtered tree copy otherwise — and the file tools and commands both operate on that copy. On close, added and modified files are written back, deletions are applied, and a failed merge keeps the copy and prints its path. Copies left behind by a killed process are removed on the next start.
+
+Two boundaries worth stating plainly:
+
+- **Command approval stays on.** The copy protects the host from accidental damage; it does not make arbitrary commands safe.
+- **MCP server processes are not sandboxed.** They run on the host with your privileges. A stdio server's default `cwd` is pointed at the copy so its relative paths line up, but HTTP servers and absolute paths still reach the host.
+
+## Python API
+
+Run a complete loop offline — no network, no API key:
 
 ```python
 import asyncio
@@ -69,7 +132,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## Using a real model
+Use a real model through the stateful `Agent` facade:
 
 ```python
 from gradus.agent.agent import Agent
@@ -84,7 +147,11 @@ spec = ModelSpec(
     max_output_tokens=8192,
 )
 
-agent = await Agent.connect(spec, LoopConfig(system="You are a helpful assistant"), api_key="sk-...")
+agent = await Agent.connect(
+    spec,
+    LoopConfig(system="You are a helpful assistant"),
+    api_key="sk-...",
+)
 try:
     async for event in agent.prompt("hi"):
         ...
@@ -92,32 +159,34 @@ finally:
     await agent.aclose()
 ```
 
-`Agent.connect()` creates one `httpx.AsyncClient` and reuses it across runs; `aclose()` closes it. To share a pool between several agents, pass the same `client` to each `connect()` call.
+`Agent.connect()` creates one `httpx.AsyncClient` and reuses it across runs; `aclose()` closes it. Pass the same `client` to several `connect()` calls to share a pool.
 
 ## Layout
 
 ```
 Gradus/
 ├── gradus/
-│   ├── ai/        # providers, internal protocol, events, transport
-│   ├── agent/     # loop, tool runtime, hooks, stateful Agent
-│   └── coding/    # product assembly (skeleton)
+│   ├── ai/          # providers, internal protocol, streaming events, transport
+│   ├── agent/       # loop, hooks, tool runtime, stateful Agent
+│   └── coding/      # config, sessions, tools, permissions, sandbox, MCP, CLI
 ├── pyproject.toml
 └── uv.lock
 ```
 
 ## Documentation
 
-- `ai`: [README](gradus/ai/README.md) · [design](gradus/ai/docs/design.md) · [plan](gradus/ai/ai_plan.md)
-- `agent`: [README](gradus/agent/README.md) · [design](gradus/agent/docs/design.md) · [plan](gradus/agent/agent_plan.md)
-- `coding`: [README](gradus/coding/README.md) · [design](gradus/coding/docs/design.md) · [plan](gradus/coding/coding_plan.md)
+| Layer | README | Design | Plan |
+| --- | --- | --- | --- |
+| `ai` | [README](gradus/ai/README.md) | [design](gradus/ai/docs/design.md) | [plan](gradus/ai/ai_plan.md) |
+| `agent` | [README](gradus/agent/README.md) | [design](gradus/agent/docs/design.md) | [plan](gradus/agent/agent_plan.md) |
+| `coding` | [README](gradus/coding/README.md) | [design](gradus/coding/docs/design.md) | [plan](gradus/coding/coding_plan.md) |
 
 ## Design principles
 
 1. **Dependencies point down only.** Upper layers may call lower ones; lower layers never see upper ones. `ai` imports neither `agent` nor `coding`; `agent` never imports `coding`.
-2. **Event-driven.** The 12 `ai` events are forwarded unchanged by `agent`, which only adds run-level events.
-3. **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are all async; the loop never blocks.
-4. **Tools belong to the upper layer.** `agent` only defines the `AgentTool` protocol; file and shell operations live in `coding`.
+2. **Events are the interface.** The 12 `ai` events are forwarded unchanged by `agent`, which only adds run-level events.
+3. **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are async; the loop never blocks on I/O.
+4. **Tools belong to the upper layer.** `agent` defines the `AgentTool` protocol; file, search, and shell implementations live in `coding`.
 
 ## Acknowledgements
 

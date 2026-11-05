@@ -20,6 +20,7 @@ MODULES = (
     "gradus.ai.tests.test_openai_compat",
     "gradus.ai.tests.test_openai_responses",
     "gradus.ai.tests.test_provider_factory",
+    "gradus.ai.tests.test_record",
     "gradus.ai.tests.test_replay",
     "gradus.ai.tests.test_transport",
 )

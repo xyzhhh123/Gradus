@@ -335,9 +335,9 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 多用户与共享：
 
 - **不要按用户分池**。连接与用户无关，`api_key` 在请求头里；推荐一个进程一个池，所有 Agent 共用。
-- `Agent` 实例必须**每用户一个**：历史、状态、steering / follow-up 队列都按用户隔离；共享的只是 client，不是 Agent。
+- `Agent` 实例不共享：历史、状态、steering / follow-up 队列都按实例隔离；粒度由上层决定（coding 定为一个会话一个）；共享的只是 client，不是 Agent。
 - 共享时所有 Agent 传同一个 client；只有 host、代理、TLS 或 `limits` 不同才需要另建池。一个 `AsyncClient` 本来就能管理多个 host 的连接。
-- **当前没有自动全局池**：不传 client 时每个 Agent 自建一个。把池提到进程级的装配属于 coding 层（`agent_plan.md` 的 CO-12），agent 只提供注入口。
+- **当前没有自动全局池**：不传 client 时每个 Agent 自建一个。把池提到进程级的装配属于 coding 层（`coding_plan.md` 的 M0），agent 只提供注入口。
 
 ### 7.2 待注入消息队列
 
