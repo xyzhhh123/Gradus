@@ -250,8 +250,10 @@ async def main(argv: list[str] | None = None) -> int:
     if backend == "docker":
         state = "network on" if settings.sandbox_network else "no network"
         print(f"sandbox: docker · {settings.sandbox_image} · {state}")
+    elif backend == "restricted":
+        print("sandbox: restricted · write only in the copy · network NOT isolated")
     elif backend == "appcontainer":
-        print("sandbox: appcontainer · no network")
+        print("sandbox: appcontainer · no network · deprecated")
     elif backend == "none":
         print(f"sandbox: {settings.sandbox} unavailable")
     elif settings.sandbox != "local":

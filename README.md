@@ -6,9 +6,9 @@
 
 ## Highlights
 
-- **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini all reduce to one message model plus 12 streaming events.
+- **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini all reduce to one message model plus 12 streaming events. Gemini is implemented against the documented format but is still **in testing** (no live endpoint verified yet).
 - **A tool loop with real control** — one async loop, 9 hooks, 8 run-level events, parallel tool execution, `steer` / `follow_up`, cancellation, and retries.
-- **Sandboxed execution** — `appcontainer` (Windows, zero install), `docker`, or `local`; each session works on a private workspace copy, and added, edited, and deleted files merge back on close.
+- **Sandboxed execution** — `restricted` (Windows, no admin: read as usual, writes only inside the copy), `appcontainer` (deprecated), `docker`, or `local`; each session works on a private workspace copy, and added, edited, and deleted files merge back on close.
 - **MCP and extensions** — project-scoped MCP servers with explicit trust and OAuth, plus Python tools, slash commands, and `SKILL.md` skills loaded from `.gradus/`.
 - **Codemode** — the model writes Python that calls `tools.*`; only `text()` / `return` enters the context.
 - **Sessions and context** — JSONL history, resume, token budgeting, and automatic compaction.
@@ -59,7 +59,7 @@ GRADUS_API_KEY=sk-...
 ```bash
 uv run gradus                      # workspace = current directory
 uv run gradus --workspace ../app   # or point it somewhere else
-uv run gradus --sandbox docker     # auto -> appcontainer -> docker -> local
+uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docker -> local
 ```
 
 A key alone cannot identify a provider, so the service, model, and key are configured together. CLI flags override `.env`, which overrides `~/.gradus/config.json`.
@@ -67,7 +67,7 @@ A key alone cannot identify a provider, so the service, model, and key are confi
 | Flag | Purpose |
 | --- | --- |
 | `--workspace` | Root for tools and commands (default: current directory) |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` |
+| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
 | `--service` / `--provider` / `--model` / `--base-url` | Override the connection |
 | `--resume` / `--session-dir` | Resume a JSONL session, or choose where new ones go |
 | `--mcp` / `--config` | Explicit MCP and config file paths |
@@ -81,14 +81,16 @@ Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill
 
 | Backend | When it is used | Boundary |
 | --- | --- | --- |
-| `appcontainer` | Windows; the default when available | AppContainer token, no network, Job Object kills child processes |
-| `docker` | Docker engine available | Container with `--network none`, memory / CPU / PID limits |
+| `restricted` | Windows; `auto` picks it first | Restricted token (synthetic SID + logon SID + `Everyone`): reads follow your account, writes only land in the copy and scratch. **No network isolation.** No admin, no extra install. |
+| `appcontainer` | Windows; only when `restricted` is unavailable | AppContainer token, no network, Job Object kills child processes. **Deprecated**: kept working, no further work. |
+| `docker` | Docker engine available | Container with `--network none`, memory / CPU / PID limits. **In testing**: kept as a cross-platform fallback, not yet verified against a live engine. |
 | `local` | Fallback | None; commands run with your user privileges |
 
 A sandbox session never edits your workspace directly. It gets a private copy — `git worktree` when the workspace is a git repository, a filtered tree copy otherwise — and the file tools and commands both operate on that copy. On close, added and modified files are written back, deletions are applied, and a failed merge keeps the copy and prints its path. Copies left behind by a killed process are removed on the next start.
 
-Two boundaries worth stating plainly:
+Three boundaries worth stating plainly:
 
+- **`restricted` does not block the network.** The write boundary is real; the network is not. Use `docker` when a command must be offline.
 - **Command approval stays on.** The copy protects the host from accidental damage; it does not make arbitrary commands safe.
 - **MCP server processes are not sandboxed.** They run on the host with your privileges. A stdio server's default `cwd` is pointed at the copy so its relative paths line up, but HTTP servers and absolute paths still reach the host.
 

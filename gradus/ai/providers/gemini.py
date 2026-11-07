@@ -224,7 +224,12 @@ def parse_usage(usage: dict[str, Any]) -> Usage:
 
 
 class GeminiProvider:
-    """parts 形状适配器；functionCall 一次到齐，需自行合成三阶段事件。"""
+    """parts 形状适配器；functionCall 一次到齐，需自行合成三阶段事件。
+
+    **测试中**：目前没有可用的 Gemini API key，尚未用真实流验证；请求与事件
+    形状按官方格式实现，只有离线用例与录制格式覆盖。采用 Gemini 原生格式的
+    厂商较少，暂不作为主要支持对象。
+    """
 
     def __init__(
         self,

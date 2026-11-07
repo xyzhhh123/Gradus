@@ -1,7 +1,7 @@
-"""执行环境（local / docker / appcontainer）的离线测试。
+"""执行环境（local / docker / appcontainer / restricted）的离线测试。
 
-不依赖真实 Docker 与 AppContainer：只断言参数拼装与路径映射；真正起进程的那一步在
-`Environment.spawn()` 里，集成验证留到有 Docker / Windows 的机器上手动跑。
+不依赖真实 Docker、AppContainer 或令牌 API：只断言参数拼装与路径映射；真正起进程
+的那一步留在实机契约里（`test_sandbox_live.py`）。
 """
 
 from __future__ import annotations
@@ -11,12 +11,13 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from gradus.ai.base import ModelSpec
-from gradus.coding import appcontainer, sandbox, session
+from gradus.coding import appcontainer, restricted, sandbox, session
 from gradus.coding.config import Settings
 
 
@@ -303,7 +304,28 @@ class SessionSandboxTest(unittest.IsolatedAsyncioTestCase):
 
 
 class SessionAutoBackendTest(unittest.IsolatedAsyncioTestCase):
-    async def test_prefers_appcontainer_and_skips_docker(self):
+    async def test_prefers_restricted_and_skips_docker(self):
+        async def explode(_docker: str = "docker") -> str | None:
+            raise AssertionError("docker must not be probed when restricted works")
+
+        root = _temp_workspace()
+
+        with (
+            patch.object(session.restricted, "problem", return_value=None),
+            patch.object(session, "docker_problem", explode),
+        ):
+            one = await session.Session.connect(
+                _settings(sandbox="auto"), system="custom", workspace=root
+            )
+        try:
+            self.assertEqual(one.sandbox_backend, "restricted")
+            self.assertIn("powershell", {tool.spec.name for tool in one.tools})
+            self.assertIsNone(one.sandbox_warning)
+        finally:
+            await one.aclose()
+            shutil.rmtree(root, ignore_errors=True)
+
+    async def test_prefers_appcontainer_when_restricted_missing(self):
         async def explode(_docker: str = "docker") -> str | None:
             raise AssertionError("docker must not be probed when appcontainer works")
 
@@ -313,6 +335,7 @@ class SessionAutoBackendTest(unittest.IsolatedAsyncioTestCase):
         root = _temp_workspace()
 
         with (
+            patch.object(session.restricted, "problem", return_value="not windows"),
             patch.object(session.appcontainer, "problem", return_value=None),
             patch.object(session.appcontainer, "cleanup_orphans", no_orphans),
             patch.object(session, "docker_problem", explode),
@@ -328,7 +351,7 @@ class SessionAutoBackendTest(unittest.IsolatedAsyncioTestCase):
             await one.aclose()
             shutil.rmtree(root, ignore_errors=True)
 
-    async def test_falls_back_to_docker_when_appcontainer_missing(self):
+    async def test_falls_back_to_docker_when_no_windows_backend(self):
         async def available(_docker: str = "docker") -> str | None:
             return None
 
@@ -338,6 +361,7 @@ class SessionAutoBackendTest(unittest.IsolatedAsyncioTestCase):
         root = _temp_workspace()
 
         with (
+            patch.object(session.restricted, "problem", return_value="not windows"),
             patch.object(session.appcontainer, "problem", return_value="not windows"),
             patch.object(session, "docker_problem", available),
             patch.object(session, "cleanup_orphans", no_orphans),
@@ -358,6 +382,7 @@ class SessionAutoBackendTest(unittest.IsolatedAsyncioTestCase):
             return "daemon is not running"
 
         with (
+            patch.object(session.restricted, "problem", return_value="not windows"),
             patch.object(session.appcontainer, "problem", return_value="not windows"),
             patch.object(session, "docker_problem", missing),
         ):
@@ -492,6 +517,111 @@ class AppContainerCleanupTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 json.loads((state / "acl-grants.json").read_text()), {str(current): 30}
             )
+
+
+class TempCleanupTest(unittest.TestCase):
+    """临时目录里只回收自己的、超时的东西。"""
+
+    def _stamp(self, path: Path, seconds_ago: float) -> None:
+        moment = time.time() - seconds_ago
+        os.utime(path, (moment, moment))
+
+    def test_removes_only_old_own_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_file = root / "gradus-mcp-old.txt"
+            old_file.write_text("x", encoding="utf-8")
+            new_file = root / "gradus-mcp-new.txt"
+            new_file.write_text("x", encoding="utf-8")
+            old_dir = root / "gradus-rs-old"
+            old_dir.mkdir()
+            (old_dir / "a.txt").write_text("x", encoding="utf-8")
+            new_dir = root / "gradus-tmp-new"
+            new_dir.mkdir()
+            other = root / "keep.txt"
+            other.write_text("x", encoding="utf-8")
+
+            self._stamp(old_file, 2 * 24 * 3600)
+            self._stamp(old_dir / "a.txt", 8 * 24 * 3600)
+            self._stamp(old_dir, 8 * 24 * 3600)
+
+            removed = set(sandbox.cleanup_temp(root=root))
+
+            self.assertEqual(removed, {"gradus-mcp-old.txt", "gradus-rs-old"})
+            self.assertFalse(old_file.exists())
+            self.assertFalse(old_dir.exists())
+            self.assertTrue(new_file.exists())
+            self.assertTrue(new_dir.exists())
+            self.assertTrue(other.exists())
+
+    def test_recent_activity_inside_an_old_directory_keeps_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scratch = root / "gradus-ac-2024"
+            scratch.mkdir()
+            active = scratch / "script.py"
+            active.write_text("print(1)", encoding="utf-8")
+            self._stamp(scratch, 30 * 24 * 3600)
+            self._stamp(active, 60)
+
+            self.assertEqual(sandbox.cleanup_temp(root=root), ())
+            self.assertTrue(scratch.exists())
+
+    def test_scratch_with_a_dead_owner_is_removed_immediately(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dead = root / "gradus-rs-dead"
+            dead.mkdir()
+            (dead / sandbox.SCRATCH_MARKER).write_text("999999", encoding="utf-8")
+            alive = root / "gradus-tmp-alive"
+            alive.mkdir()
+            (alive / sandbox.SCRATCH_MARKER).write_text(
+                str(os.getpid()), encoding="utf-8"
+            )
+
+            removed = sandbox.cleanup_temp(root=root)
+
+            self.assertEqual(removed, ("gradus-rs-dead",))
+            self.assertFalse(dead.exists())
+            self.assertTrue(alive.exists())
+
+
+class RestrictedBackendTest(unittest.IsolatedAsyncioTestCase):
+    def test_random_sid_looks_like_a_domain_sid(self):
+        first = restricted.random_sid()
+        second = restricted.random_sid()
+        self.assertRegex(first, r"^S-1-5-21-(\d+-){3}\d+$")
+        self.assertNotEqual(first, second)
+
+    @unittest.skipUnless(sys.platform == "win32", "restricted is Windows-only")
+    def test_problem_is_none_on_windows(self):
+        self.assertIsNone(restricted.problem())
+
+    def test_problem_explains_other_platforms(self):
+        with patch.object(restricted.sys, "platform", "linux"):
+            self.assertIn("Windows", restricted.problem() or "")
+
+    async def test_acl_script_targets_the_session_sid(self):
+        calls: list[tuple[str, ...]] = []
+
+        class FakeProcess:
+            async def wait(self) -> int:
+                return 0
+
+        async def fake_exec(*argv, **_kwargs):
+            calls.append(argv)
+            return FakeProcess()
+
+        with patch.object(restricted.asyncio, "create_subprocess_exec", fake_exec):
+            await restricted._acl(
+                Path("C:/tmp/it's"), "S-1-5-21-1-2-3-4", "AddAccessRule"
+            )
+
+        script = calls[0][-1]
+        self.assertIn("S-1-5-21-1-2-3-4", script)
+        self.assertIn("AddAccessRule", script)
+        # 单引号路径要转义成两个单引号，否则 PowerShell 会提前结束字符串。
+        self.assertIn("it''s", script)
 
 
 if __name__ == "__main__":

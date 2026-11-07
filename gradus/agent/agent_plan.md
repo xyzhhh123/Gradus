@@ -124,7 +124,7 @@ coding/*  ->  agent/*  ->  ai/*
 | AG-10 | 边界测试只查 import | agent 测试 | 加强 `test_boundary.py`，扫描 `open` / `subprocess` / `os.environ` 等调用 |
 | AG-11 | 部分分支没有测试 | agent 测试 | 已修复：补 `max_turns=0`、缺少 `StreamDone`、非 `ToolResult`、`partial.usage`，见 `docs/problem.md` |
 | AG-18 | 并行工具批次没有并发上限 | agent 机制 + coding 配置 | 未做：并行批次一次创建全部 task，模型给出大批次时可能打满连接、文件句柄或线程池。后续在 `LoopConfig` 加 `max_parallel_tools`，用 `asyncio.Semaphore` 限制同时执行数；不改变结果顺序与规则 A。当前批次通常很小，暂不处理 |
-| AG-19 | 富工具结果无法进入历史（图片、结构化内容） | ai + coding | 未做：`ToolResultMessage.content` 仍是 `str`；要支持图片/块列表，需要先做模型能力判断（同一适配器下不同模型能力不同），再扩展 `ai/types.py` 与四个适配器。当前只把 `details` / `structured_content` / `usage` 暴露在 `ToolExecutionEnd` |
+| AG-19 | 富工具结果无法进入历史（图片、结构化内容） | ai + coding | **测试中，暂缓**：目前不考虑富工具，`details` / `structured_content` / `usage` 只透传到 `ToolExecutionEnd`。要支持图片 / 块列表，需先做模型能力判断（同一适配器下不同模型能力不同），再扩展 `ai/types.py` 与四个适配器 |
 
 ## 对齐 Pi 的改进计划
 

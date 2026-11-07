@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -793,6 +794,72 @@ class StdioConnectionTest(unittest.IsolatedAsyncioTestCase):
                     [tool.spec.name for tool in session.deferred], ["mcp__demo__add"]
                 )
                 self.assertEqual(session.deferred_servers, (("demo", "Demo tools"),))
+            finally:
+                await session.aclose()
+
+
+FAIL_SOURCE = '''
+import sys
+
+print("boom from server", file=sys.stderr)
+sys.stderr.flush()
+sys.exit(1)
+'''
+
+
+ENV_SERVER_SOURCE = '''
+import os
+
+from mcp.server.mcpserver import MCPServer
+
+server = MCPServer("env", log_level="ERROR")
+
+
+@server.tool()
+def read_env(name: str) -> str:
+    """Read an environment variable."""
+    return os.environ.get(name, "<missing>")
+
+
+if __name__ == "__main__":
+    server.run("stdio")
+'''
+
+
+class StdioEnvironmentTest(unittest.IsolatedAsyncioTestCase):
+    """stdio server 只拿到白名单 env，宿主凭证不外传。"""
+
+    async def test_only_the_allowlist_and_configured_env_reach_the_server(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "server.py"
+            script.write_text(ENV_SERVER_SOURCE, encoding="utf-8")
+            servers = [
+                mcp.McpServer(
+                    name="env",
+                    command=sys.executable,
+                    args=(str(script),),
+                    cwd=tmp,
+                    exposure="direct",
+                    env={"GRADUS_MCP_TEST_EXTRA": "configured"},
+                )
+            ]
+
+            with patch.dict(
+                os.environ, {"GRADUS_MCP_TEST_SECRET": "must-not-leak"}, clear=False
+            ):
+                async with asyncio.timeout(60):
+                    session = await mcp.connect(servers)
+            try:
+                tool = session.tools[0]
+
+                async def read(name: str) -> str:
+                    result = await tool.execute("call", {"name": name})
+                    self.assertFalse(result.is_error, result.content)
+                    return result.content
+
+                self.assertEqual(await read("GRADUS_MCP_TEST_SECRET"), "<missing>")
+                self.assertNotEqual(await read("PATH"), "<missing>")
+                self.assertEqual(await read("GRADUS_MCP_TEST_EXTRA"), "configured")
             finally:
                 await session.aclose()
 

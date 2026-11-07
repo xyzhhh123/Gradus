@@ -186,7 +186,7 @@ gradus/ai/
     ├── __init__.py             # factory: create_provider(spec, api_key, client=None)
     ├── openai_compat.py        # Chat Completions shape (DeepSeek, Qwen, Kimi, GLM, Ollama)
     ├── anthropic.py            # Messages shape (Claude)
-    ├── gemini.py               # generateContent shape (Gemini)
+    ├── gemini.py               # generateContent shape (Gemini; in testing)
     ├── openai_responses.py     # Responses shape (GPT)
     └── fake.py                 # scripted provider, offline, deterministic
 ```

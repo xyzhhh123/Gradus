@@ -1,14 +1,17 @@
-"""沙箱后端实机一致性检查（直连真实 AppContainer / Docker，不做离线断言）。
+"""沙箱后端实机一致性检查（直连真实后端，不做离线断言）。
 
 默认跳过。改动沙箱相关代码前后跑一次：
 
     GRADUS_SANDBOX_LIVE=1 uv run python -m pytest gradus/coding/tests/test_sandbox_live.py -q -s
 
-`GRADUS_SANDBOX_BACKEND` 可指定后端，缺省 `appcontainer`。
+`GRADUS_SANDBOX_BACKEND` 可指定后端，缺省 `restricted`。
 
 它把 `docs/design.md`「沙箱使用契约」里能自动断言的条款一次性跑完：副本位置与工作
 目录、相对路径读写、未跟踪文件、越界读写、删除、网络、超时、codemode、合回宿主
 （新增 / 修改 / 删除）与孤儿副本清理。跑不通的条款就是契约被破坏了，不要靠手工试。
+
+两条按后端不同的条款：`restricted` 允许读副本之外的文件（只限制写），并且不阻断
+网络；`appcontainer` 两者都拦。
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from gradus.coding import session, workspace
 from gradus.coding.config import Settings
 
 LIVE = os.environ.get("GRADUS_SANDBOX_LIVE") == "1"
-BACKEND = os.environ.get("GRADUS_SANDBOX_BACKEND", "appcontainer")
+BACKEND = os.environ.get("GRADUS_SANDBOX_BACKEND", "restricted")
 GIT = shutil.which("git")
 
 
@@ -105,7 +108,7 @@ class SandboxContractTest(unittest.IsolatedAsyncioTestCase):
         return result.content, result.is_error
 
     async def test_backend_and_copy_location(self) -> None:
-        self.assertIn(self.one.sandbox_backend, ("appcontainer", "docker"))
+        self.assertIn(self.one.sandbox_backend, ("restricted", "appcontainer", "docker"))
         self.assertTrue(self.copy.is_dir(), "sandbox workspace copy is missing")
         # 副本必须直接放在临时目录下：再嵌套一层，AppContainer 就设不了工作目录。
         self.assertEqual(self.copy.parent, Path(tempfile.gettempdir()).resolve())
@@ -132,13 +135,25 @@ class SandboxContractTest(unittest.IsolatedAsyncioTestCase):
     async def test_reads_and_writes_outside_are_denied(self) -> None:
         secret = str(self.outside / "secret.txt")
         content, failed = await self._run(f"Get-Content '{secret}'")
-        self.assertTrue(failed, f"read outside the workspace succeeded: {content}")
+        if BACKEND == "restricted":
+            # 受限令牌只收窄写，读与当前用户一致。
+            self.assertFalse(failed, f"restricted backend must be able to read: {content}")
+        else:
+            self.assertTrue(failed, f"read outside the workspace succeeded: {content}")
 
         target = str(self.outside / "written.txt")
         _, failed = await self._run(f"Set-Content -Path '{target}' -Value nope")
         self.assertTrue(failed, "write outside the workspace succeeded")
         self.assertFalse((self.outside / "written.txt").exists())
-        print("[ok] 越界读写被拒", flush=True)
+        print("[ok] 越界写被拒（读按后端策略）", flush=True)
+
+    @unittest.skipIf(
+        BACKEND != "restricted", "only the restricted backend allows reads outside"
+    )
+    async def test_restricted_reads_stay_available(self) -> None:
+        content, failed = await self._run("Get-Content 'C:\\Windows\\win.ini'")
+        self.assertFalse(failed, content)
+        print("[ok] restricted 下读系统文件正常", flush=True)
 
     async def test_delete_works_through_dotnet(self) -> None:
         _, failed = await self._run("Set-Content -Path rel.txt -Value rel")
@@ -161,6 +176,10 @@ class SandboxContractTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((self.copy / "rel.txt").exists())
         print("[ok] .NET 删除可用", flush=True)
 
+    @unittest.skipIf(
+        BACKEND == "restricted",
+        "the restricted backend cannot block the network (see docs/design.md)",
+    )
     async def test_network_is_blocked(self) -> None:
         content, _ = await self._run(
             "$c = New-Object Net.Sockets.TcpClient; "

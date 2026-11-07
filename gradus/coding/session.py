@@ -55,6 +55,7 @@ from ..ai.types import (
 )
 from . import appcontainer
 from . import extensions
+from . import restricted
 from . import workspace
 from .config import Settings
 from .sandbox import (
@@ -62,6 +63,7 @@ from .sandbox import (
     Environment,
     LocalEnvironment,
     cleanup_orphans,
+    cleanup_temp,
     docker_problem,
 )
 from .context import (
@@ -248,7 +250,9 @@ def _build_tools(
 
 
 async def _pick_backend() -> str:
-    """`auto` 的顺序：AppContainer（Windows 零安装）-> Docker -> local。"""
+    """`auto` 的顺序：受限令牌（Windows 目标后端）-> AppContainer -> Docker -> local。"""
+    if restricted.problem() is None:
+        return "restricted"
     if appcontainer.problem() is None:
         return "appcontainer"
     if await docker_problem() is None:
@@ -285,12 +289,16 @@ async def _build_environment(
             )
         return LocalEnvironment(root), None, (), None
 
-    if backend == "appcontainer":
-        problem = appcontainer.problem()
+    if backend in ("restricted", "appcontainer"):
+        problem = (
+            restricted.problem()
+            if backend == "restricted"
+            else appcontainer.problem()
+        )
         if problem is not None:
             return (
                 None,
-                f"sandbox appcontainer unavailable: {problem}; "
+                f"sandbox {backend} unavailable: {problem}; "
                 "bash / powershell / codemode are disabled",
                 (),
                 None,
@@ -308,6 +316,9 @@ async def _build_environment(
 
     notes: list[str] = []
     copy: workspace.WorkspaceCopy | None = None
+    # 顺手回收临时目录里自己的残留（MCP 落盘结果、强杀留下的 scratch）。静默执行：
+    # 失败不影响会话，也不并进 sandbox_orphans，避免每次启动都刷屏。
+    await asyncio.to_thread(cleanup_temp)
     removed_workspaces = await workspace.cleanup_orphans()
     try:
         copy = await workspace.create(root)
@@ -316,7 +327,10 @@ async def _build_environment(
 
     tool_root = copy.path if copy is not None else root
 
-    if backend == "appcontainer":
+    if backend == "restricted":
+        removed = ()
+        env: Environment = restricted.RestrictedEnvironment(tool_root)
+    elif backend == "appcontainer":
         if settings.sandbox_network:
             notes.append(
                 "sandbox appcontainer has no network; sandbox_network is ignored"

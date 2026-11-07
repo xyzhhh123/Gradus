@@ -6,9 +6,9 @@
 
 ## 特性
 
-- **四种模型协议，一套内部形状** —— Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini 统一成一套消息模型与 12 个流式事件。
+- **四种模型协议，一套内部形状** —— Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini 统一成一套消息模型与 12 个流式事件。Gemini 按官方格式实现，仍是**测试中**（尚未用真实端点验证）。
 - **真正可控的工具循环** —— 单层异步循环、9 个 hook、8 个运行级事件、并行工具、`steer` / `follow_up`、取消与重试。
-- **沙箱执行** —— `appcontainer`（Windows 零安装）/ `docker` / `local`；每个会话操作私有副本，新增、修改、删除在关闭时合回宿主。
+- **沙箱执行** —— `restricted`（Windows，免管理员：读照常，写只在副本里）/ `appcontainer`（已弃用）/ `docker` / `local`；每个会话操作私有副本，新增、修改、删除在关闭时合回宿主。
 - **MCP 与扩展** —— 项目级 MCP server（显式信任 + OAuth），以及从 `.gradus/` 加载的 Python 工具、斜杠命令与 `SKILL.md` 技能。
 - **Codemode** —— 模型写 Python 调用 `tools.*`，只有 `text()` / `return` 的结果进入上下文。
 - **会话与上下文** —— JSONL 历史、断点恢复、token 预算与自动压缩。
@@ -59,7 +59,7 @@ GRADUS_API_KEY=sk-...
 ```bash
 uv run gradus                      # workspace 为当前目录
 uv run gradus --workspace ../app   # 或指定其它目录
-uv run gradus --sandbox docker     # auto -> appcontainer -> docker -> local
+uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docker -> local
 ```
 
 单靠一个 key 认不出服务商，所以服务、模型、key 要放在一起配。优先级：命令行参数 > `.env` > `~/.gradus/config.json`。
@@ -67,7 +67,7 @@ uv run gradus --sandbox docker     # auto -> appcontainer -> docker -> local
 | 参数 | 用途 |
 | --- | --- |
 | `--workspace` | 工具与命令的根目录（缺省为当前目录） |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` |
+| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
 | `--service` / `--provider` / `--model` / `--base-url` | 覆盖连接配置 |
 | `--resume` / `--session-dir` | 恢复 JSONL 会话，或指定新会话目录 |
 | `--mcp` / `--config` | 指定 MCP 与配置文件路径 |
@@ -81,14 +81,16 @@ uv run gradus --sandbox docker     # auto -> appcontainer -> docker -> local
 
 | 后端 | 何时使用 | 边界 |
 | --- | --- | --- |
-| `appcontainer` | Windows，可用时优先 | AppContainer 令牌、默认断网、Job Object 连带杀子进程 |
-| `docker` | Docker 引擎可用 | 容器内执行，`--network none`，限制内存 / CPU / 进程数 |
+| `restricted` | Windows，`auto` 优先选它 | 受限令牌（合成 SID + logon SID + `Everyone`）：读跟随当前账户，写只落在副本与 scratch。**不阻断网络。** 免管理员、免安装。 |
+| `appcontainer` | Windows，仅在 `restricted` 不可用时 | AppContainer 令牌、默认断网、Job Object 连带杀子进程。**已弃用**：保留可用、不再演进。 |
+| `docker` | Docker 引擎可用 | 容器内执行，`--network none`，限制内存 / CPU / 进程数。**测试中**：作为跨平台备用保留，尚未在真实引擎上验证。 |
 | `local` | 兜底 | 无；命令以当前用户权限直接执行 |
 
 沙箱会话不会直接改你的 workspace：它先拿到一份私有副本——git 仓库根走 `git worktree`，其余走过滤后的整树复制——文件工具和命令都在这份副本上工作。关闭时写回新增与修改、执行删除；合并失败会保留副本并打印路径。强杀留下的副本会在下次启动时清理。
 
-两条边界需要说清楚：
+三条边界需要说清楚：
 
+- **`restricted` 不阻断网络。** 写边界是真的，网络不是。命令必须离线时用 `docker`。
 - **命令审批不会关掉。** 副本防的是误伤宿主，不等于任意命令都安全。
 - **MCP server 进程不在沙箱里。** 它以宿主用户权限运行；stdio server 的缺省 `cwd` 会指到副本，让相对路径对齐，但 HTTP server 与绝对路径仍然直接落到宿主。
 

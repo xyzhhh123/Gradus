@@ -32,7 +32,7 @@ ai/       Provider、内部协议
 - 只有批次内每个工具都声明 `execution_mode="parallel"` 时才并发执行，否则整批串行；结果仍按源顺序写回；
 - 只有整批工具结果都 `terminate=True` 时才跳过下一次模型请求；混合批次照常继续；
 - 工具的 `on_update` 进度会转成 `ToolExecutionUpdate`，只出现在 `ToolExecutionStart` 与 `ToolExecutionEnd` 之间；
-- `details` / `structured_content` / `usage` 只通过 `ToolExecutionEnd` 暴露，不进入历史，也不计入运行用量；
+- `details` / `structured_content` / `usage` 只通过 `ToolExecutionEnd` 暴露，不进入历史，也不计入运行用量（**测试中**：富工具结果暂缓，接口可能调整）；
 - 在运行前后、请求前、工具前后、轮次收尾与上限判断调用可选 hooks；不传时行为不变；
 - 在请求前、轮次后排空 steering，在停止前排空 follow-up；
 - 保证每个工具调用都有对应的工具结果；

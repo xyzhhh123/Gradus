@@ -32,7 +32,7 @@ agent 层     ->  base.py / types.py
 | M6 | `anthropic`：请求侧约束最多的一家（角色交替、signature 回传） | 完成 |
 | M7 | `gemini`：合成缺失的 delta | 完成 |
 | M8 | `openai_responses`：item / part / delta 三层折叠 | 完成 |
-| M9 | 录制回放：真实 SSE 样本存成 fixture，离线断言解析正确性 | 收尾：9 条真实样本已覆盖三种协议；`gemini` 缺 key 暂不录，`ai` 层到此告一段落 |
+| M9 | 录制回放：真实 SSE 样本存成 fixture，离线断言解析正确性 | 收尾：9 条真实样本已覆盖三种协议；`gemini` 缺 key 暂不录（**测试中**，采用该格式的厂商较少，暂不作为主支持），`ai` 层到此告一段落 |
 
 顺序理由：先让事件流离线自洽（M2），再抽公共累积逻辑（M3），最后才接网络（M4 起）。
 反过来做的话，协议缺陷会被网络问题掩盖。

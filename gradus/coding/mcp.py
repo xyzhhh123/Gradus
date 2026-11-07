@@ -687,6 +687,8 @@ async def _open_client(
 ) -> Any:
     handler = _notification_handler(flags) if flags is not None else None
     if server.command is not None:
+        # env 由 MCP SDK 收窄：`get_default_environment()` 只继承 PATH / SYSTEMROOT /
+        # APPDATA 等安全变量，再并上 mcp.json 的 env；宿主其余变量（API key）不传。
         params = StdioServerParameters(
             command=server.command,
             args=list(server.args),

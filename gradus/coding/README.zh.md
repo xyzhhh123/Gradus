@@ -33,7 +33,7 @@ ai/       Provider、内部协议
 - 连接 `.gradus/mcp.json` 中列出的 MCP server（项目配置首次确认后记住），按 server / `toolExposure` 策略暴露工具：默认 `deferred`，由 `tool_search` 按需加载；配了 `oauth` 的 HTTP server 走浏览器授权，token 存在 `~/.gradus/mcp-auth.json`；
 - 从 `<workspace>/.gradus/extensions` 动态加载扩展（需信任）——Python 工具、Markdown 斜杠命令、`SKILL.md` 技能；`/reload` 可不重启重新加载；
 - 从 workspace 及其上级目录读 `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md`，按「根 -> workspace」拼进系统提示（不需要信任）；
-- 命令与 `codemode` 走可替换的执行环境：`local`（现状）或 `docker`（长驻容器、默认断网、限制内存 / CPU / 进程数、不继承宿主环境变量）；拿不到 Docker 时不回落 local，直接禁用命令类工具并告警；
+- 命令与 `codemode` 走可替换的执行环境：`restricted`（Windows，免管理员：读跟随当前账户、写只在副本里；**不阻断网络**）、`appcontainer`（Windows 零安装，已弃用）、`local`（宿主）、`docker`（长驻容器、默认断网、限制内存 / CPU / 进程数、不继承宿主环境变量；**测试中**，保留为跨平台备用）；拿不到所选后端时不回落 local，直接禁用命令类工具并告警；
 - 命令行入口。
 
 不负责：
@@ -66,7 +66,7 @@ CLI 启动时还会读 `<workspace>/.env`：文件里的值优先，会覆盖同
 
 项目被记进 MCP 信任记录后，可用 `gradus --untrust [路径]` 撤销（省略路径时用当前 workspace），执行完直接退出。
 
-沙箱相关的三个字段：`sandbox`（`auto` / `local` / `docker` / `appcontainer`，缺省 `auto`）、`sandbox_image`（缺省 `python:3.13-slim`）、`sandbox_network`（缺省 `false`，即 `--network none`）。`auto` 按 `appcontainer` -> `docker` -> `local` 的顺序挑第一个可用的，命令行可用 `--sandbox docker` / `--sandbox appcontainer` 显式指定。Docker 不可用时命令类工具会被禁用并打印 `sandbox warning:`。沙箱后端会给会话一份 workspace 副本（git 仓库根走 `git worktree` 并把未跟踪文件也带进去，其余整树复制），文件工具与命令都读写副本；退出时自动把改动合回宿主，新增、修改、删除都同步，合并失败会保留副本并打印路径，强杀留下的副本在下次启动时清理——因此命令与写工具仍然逐次询问。容器带 `gradus.owner=<pid>` 标签，进程被强杀后残留的容器会在下次以 docker 后端启动时清掉。`appcontainer` 是 Windows 零安装后端：用系统自带 AppContainer 隔离、默认断网、只注册 `powershell`（没有 Git Bash）；解释器目录的 ACE 只授一次并缓存，被强杀留下的授权会在下次启动时撤销。
+沙箱相关的三个字段：`sandbox`（`auto` / `local` / `docker` / `appcontainer` / `restricted`，缺省 `auto`）、`sandbox_image`（缺省 `python:3.13-slim`）、`sandbox_network`（缺省 `false`，即 `--network none`）。`auto` 按 `restricted` -> `appcontainer` -> `docker` -> `local` 的顺序挑第一个可用的，命令行可用 `--sandbox docker` / `--sandbox restricted` 显式指定。Docker 不可用时命令类工具会被禁用并打印 `sandbox warning:`。沙箱后端会给会话一份 workspace 副本（git 仓库根走 `git worktree` 并把未跟踪文件也带进去，其余整树复制），文件工具与命令都读写副本；退出时自动把改动合回宿主，新增、修改、删除都同步，合并失败会保留副本并打印路径，强杀留下的副本在下次启动时清理——因此命令与写工具仍然逐次询问。容器带 `gradus.owner=<pid>` 标签，进程被强杀后残留的容器会在下次以 docker 后端启动时清掉。`restricted` 是 Windows 目标后端：合成 SID + `CreateRestrictedToken`（`WRITE_RESTRICTED`）+ `CreateProcessAsUserW`，读跟随当前账户、写只落在副本与 scratch，**不阻断网络**。`appcontainer` 保留为已弃用的零安装兜底：AppContainer 隔离、默认断网、只注册 `powershell`（没有 Git Bash）。
 
 ## 目录
 
@@ -83,6 +83,10 @@ gradus/coding/
 ├── mcp.py              # MCP server -> AgentTool
 ├── render.py           # 事件渲染：展示、日志
 ├── permissions.py      # 工具权限策略
+├── sandbox.py          # 执行环境：协议、local、docker
+├── restricted.py       # Windows 受限令牌后端（目标）
+├── win32.py            # 两个 Windows 后端共用的 Win32 原语：管道、Job Object、ACL
+├── appcontainer.py     # 旧的 AppContainer 后端（已弃用）
 ├── workspace.py        # 沙箱自有 workspace 副本与合回宿主
 ├── cli.py              # 命令行入口
 ├── tools/

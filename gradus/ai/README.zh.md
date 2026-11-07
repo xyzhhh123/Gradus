@@ -184,7 +184,7 @@ gradus/ai/
     ├── __init__.py             # 工厂：create_provider(spec, api_key, client=None)
     ├── openai_compat.py        # Chat Completions 形状（DeepSeek、Qwen、Kimi、GLM、Ollama）
     ├── anthropic.py            # Messages 形状（Claude）
-    ├── gemini.py               # generateContent 形状（Gemini）
+    ├── gemini.py               # generateContent 形状（Gemini，测试中）
     ├── openai_responses.py     # Responses 形状（GPT）
     └── fake.py                 # 剧本驱动的假 provider，离线、结果确定
 ```

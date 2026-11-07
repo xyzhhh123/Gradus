@@ -52,6 +52,10 @@ class ToolResult:
     只有 `content` / `is_error` 会进入历史，模型下一轮只看到这两项。
     `details` / `structured_content` / `usage` 只通过 `ToolExecutionEnd` 暴露给
     UI、日志与统计；它们不进入历史，也不计入 `AgentDone.usage`。
+
+    **测试中**：富工具结果（`details` / `structured_content` / `usage` 以及
+    图片、多模态内容）目前只做透传，没有进入历史，接口可能调整。等真正需要
+    富结果时再扩展 `ToolResultMessage` 与各适配器。
     """
 
     content: str

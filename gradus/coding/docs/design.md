@@ -49,8 +49,10 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 | `registry.py` | 工具装配：`ToolRegistry` 按名字去重、保持顺序；`ToolCatalog` 按 `direct` / `deferred` / `hidden` 分组；`FunctionTool` 把普通函数适配成 `AgentTool` |
 | `mcp.py` | 读 `.gradus/mcp.json`（含项目信任）、连 MCP server（stdio / Streamable HTTP）、把远端工具投影成 `AgentTool`、单 server 失败隔离 |
 | `oauth.py` | MCP 的 OAuth 支撑：token 文件存储、本地回调页、带 `auth` 的 HTTP 客户端 |
-| `sandbox.py` | 执行环境：`local` / `docker` 两种后端；命令与 codemode 都通过它起进程 |
-| `appcontainer.py` | Windows AppContainer 后端：零安装的进程级边界，`powershell` 与 codemode 走它 |
+| `sandbox.py` | 执行环境：`local` / `docker`（**测试中**）/ Windows 后端；命令与 codemode 都通过它起进程 |
+| `restricted.py` | Windows 目标后端：合成 SID + 受限令牌（`WRITE_RESTRICTED`），读跟随用户、写只在副本 |
+| `win32.py` | 两个 Windows 后端共用的原语：管道、Job Object、最小环境块、命令行拼接、ACL |
+| `appcontainer.py` | Windows AppContainer 后端（**已弃用**，保留可用、不再演进）：零安装的进程级边界，`powershell` 与 codemode 走它 |
 | `workspace.py` | 沙箱自有 workspace：git worktree 优先、复制兜底；关闭时把改动合回宿主并清理副本 |
 | `extensions.py` | 扫 `<workspace>/.gradus/extensions`，动态加载工具、斜杠命令与技能；单个文件失败只告警 |
 | `tools/mcp_resources.py` | `list_mcp_resources` / `list_mcp_resource_templates` / `read_mcp_resource`；跨 server 汇总、分页、二进制落临时文件 |
@@ -198,35 +200,57 @@ OAuth 登录（M12 续）：
 
 命令与 `codemode` 不直接起进程，而是拿一个 `Environment`（`sandbox.py`）：
 
-- 缺省值是 `auto`：按 `appcontainer` -> `docker` -> `local` 的顺序挑第一个可用的；一个都没有时回落 `local`，并用 `sandbox_warning` 说明原因；
+- 缺省值是 `auto`：按 `restricted` -> `appcontainer` -> `docker` -> `local` 的顺序挑第一个可用的；一个都没有时回落 `local`，并用 `sandbox_warning` 说明原因；
 - `local`：现状，宿主用户权限；
-- `docker`：长驻容器 + `docker exec`；workspace 读写挂到 `/workspace`，临时目录挂 `/gradus-tmp`，codemode harness 只读挂 `/opt/gradus/codemode_harness.py`；
-- `appcontainer`：Windows 零安装后端（`appcontainer.py`），用系统自带的 AppContainer 建进程级边界，不需要额外安装；
+- `restricted`：Windows 目标后端（`restricted.py`）。每个会话生成一个合成 SID（`S-1-5-21-<4 个随机数>`），只对副本与 scratch 授 `(OI)(CI)M`；以当前进程主令牌为 base 调 `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，受限 SID 清单是「合成 SID + logon SID + `Everyone`」，再用 `CreateProcessAsUserW` 起进程。**读按当前用户，写只落在圈内**；不建账户、不要管理员。传给 `CreateProcessAsUserW` 的是自身主令牌的受限版本，这种情形免 `SeAssignPrimaryTokenPrivilege`；
+- `docker`：长驻容器 + `docker exec`；workspace 读写挂到 `/workspace`，临时目录挂 `/gradus-tmp`，codemode harness 只读挂 `/opt/gradus/codemode_harness.py`。**测试中**：保留为跨平台备用，尚未在真实引擎上跑完 §5.5.1 的实机契约；断网场景用 `docker`，`restricted` 做不到；
+- `appcontainer`：Windows 零安装后端（`appcontainer.py`），用系统自带的 AppContainer 建进程级边界，不需要额外安装。**已弃用**：模块与类用 `warnings.deprecated`（PEP 702）标记，保留可用、不再演进；文件本身冻结——除一次性机械搬移（共用原语抽到 `win32.py`）外不再改动，新能力只进 `restricted.py` / `win32.py`；
 - 默认 `--network none`（`sandbox_network: true` 才放行）、`--memory 2g --cpus 2 --pids-limit 512`，不继承宿主环境变量；
 - 超时直接丢弃容器，下次调用重建；会话关闭时 `docker rm -f`；
 - 强杀残留：容器带 `gradus.owner=<pid>` 与 `gradus.user=<用户名>` 标签，下次以 docker 后端启动时先清理「owner 进程已不存在」的容器；pid 被系统复用时最多留下一个旧容器，不会误删正在用的；别的用户的容器不碰（Docker daemon 是机器级共享资源）；
 - 拿不到 Docker 时**不回落 local**：`bash` / `powershell` / `codemode` 都不注册，`Session.sandbox_warning` 给出原因，CLI 以 `sandbox warning:` 打印；
-- 边界：workspace 是沙箱私有的副本（见下），沙箱内仍能改坏副本；挡住的是宿主文件、网络、宿主凭证与残留进程。因此命令审批不放开；
-- **MCP server 进程不在沙箱边界内，但 stdio server 的缺省 cwd 指向副本**：stdio server 由 MCP SDK 在宿主直接起进程（`stdio_client`，不经过 `Environment.spawn`），HTTP / SSE server 从宿主直连。沙箱会话里，配置没写 `cwd` 的 stdio server 会把 cwd 换成副本（`session._mcp_servers_in`），它读写的相对路径于是和文件工具 / 命令一致，改动随副本在关闭时合回；显式写了 `cwd` 的保持原样。限制仍在：server 以宿主用户权限运行，能读写 workspace 之外的文件、默认联网，绝对路径参数仍指向宿主；HTTP / SSE 没有 cwd，操作的是宿主；参数级权限只能落回「未知工具 → 询问」。这条只保证路径一致，不提供隔离；
+- 边界：workspace 是沙箱私有的副本（见下），沙箱内仍能改坏副本；`restricted` 挡住的是副本之外的写，`appcontainer` / `docker` 还挡读与网络。**`restricted` 不阻断网络**——unelevated 没有防火墙规则可用，需要断网就用 `docker`。因此命令审批不放开；
+- **MCP server 进程不在沙箱边界内，但 stdio server 的缺省 cwd 指向副本**：stdio server 由 MCP SDK 在宿主直接起进程（`stdio_client`，不经过 `Environment.spawn`），HTTP / SSE server 从宿主直连。沙箱会话里，配置没写 `cwd` 的 stdio server 会把 cwd 换成副本（`session._mcp_servers_in`），它读写的相对路径于是和文件工具 / 命令一致，改动随副本在关闭时合回；显式写了 `cwd` 的保持原样。限制仍在：server 以宿主用户权限运行，能读写 workspace 之外的文件、默认联网，绝对路径参数仍指向宿主；HTTP / SSE 没有 cwd，操作的是宿主；参数级权限只能落回「未知工具 → 询问」。这条只保证路径一致，不提供隔离。stdio server 的环境变量由 MCP SDK 收窄成白名单（Windows 上 12 个安全变量：`PATH` / `SYSTEMROOT` / `APPDATA` / `TEMP` 等）再并上 `mcp.json` 的 `env`，宿主里的 `GRADUS_API_KEY` 之类不会传过去；`tests/test_mcp.py::StdioEnvironmentTest` 用真实子进程验证了这一点；
 - 文件工具与命令绑在同一份副本上：`read_file` / `write_file` / `edit` / `delete_file` / `grep` / `glob` 看到的就是命令看到的目录，权限策略的 workspace 边界也换到副本。
 
 沙箱自有 workspace（`workspace.py`）：
 
-- 只在沙箱后端（`docker` / `appcontainer`）下建副本；`local` 直接在宿主上操作；
+- 只在沙箱后端（`restricted` / `appcontainer` / `docker`）下建副本；`local` 直接在宿主上操作；
 - 形态优先 `git worktree`：仅当 workspace 本身是 git 仓库根时 `git worktree add --detach <临时目录> HEAD`；worktree 只有已提交内容，因此建好后会用 `git ls-files --others -z` 把**未跟踪文件（含被 `.gitignore` 忽略的 `.env`、本地脚本）**复制进去（跳过 `.venv` / `node_modules` / 构建产物等目录）。不复制的话模型在副本里根本看不到它们；
 - 兜底是整树复制，跳过 `.git` / `.gradus` / `node_modules` / `__pycache__` / `.venv` / `venv` / `.mypy_cache` / `.pytest_cache` / `.ruff_cache` / `dist` / `build` / `target`；
 - 关闭会话时自动合回宿主：worktree 模式在副本里 `git add -A` 后取 `diff --cached --binary`（路径限定到该打的文件），用 `git apply` 打到宿主；带进来的未跟踪文件不走补丁（补丁会当成新建），改动直接 `copy2`、内容没变则跳过，被删掉的在宿主上 `unlink`；复制模式按大小 + mtime（必要时比内容）找出新增 / 修改并 `copy2` 回去；
 - 删除也会同步：worktree 里已跟踪文件的删除由补丁完成，未跟踪文件与复制模式的删除按「建副本时存在、之后在副本里消失」判定后删宿主文件；复制模式用建副本时的文件清单做基线，会话期间宿主**新建**的文件不会被误删；
 - 合并失败不抛异常：保留副本，`Session.workspace_sync` 给出 `error` 与 `kept` 路径，CLI 以 `workspace: merge failed:` 提示；合并成功后删副本，worktree 同时 `git worktree remove` + `prune`；
 - 副本放在 `%TEMP%\gradus-ws-<pid>-<id>`，旁边一个 `.owner` 记录 owner pid、用户名与宿主路径；启动时按 pid 清理强杀留下的副本（worktree 先解除注册），别的用户的副本不碰，结果并进 `Session.sandbox_orphans`；
-- 副本必须直接放在 `%TEMP%` 下、不能嵌套子目录：AppContainer 进程在更深的目录里设不了工作目录，PowerShell 会退回 `C:\`，相对路径全部失效；
+- 副本必须直接放在 `%TEMP%` 下、不能嵌套子目录：AppContainer 进程在更深的目录里设不了工作目录，PowerShell 会退回 `C:\`，相对路径全部失效（`restricted` 不受这条限制，副本位置统一处理）；
 - 顺序：先 `sync()` 合回，再让环境撤销 ACE / 销毁容器，最后删副本；
 - 系统提示里的 `cwd` 用副本路径，模型执行 `pwd` / `Get-Location` 看到的就是它；
 - 会话文件、项目规则文件、扩展与 MCP 配置仍读宿主 workspace，不读副本。
 
-`appcontainer` 后端的已知约束：
+临时目录回收（`sandbox.cleanup_temp`）：
+
+- 每次 `Session.connect` 建副本前静默跑一次，只碰固定前缀下自己的东西：`gradus-mcp-*`（MCP 结果落盘）、`gradus-tmp-*` / `gradus-rs-*`（会话 scratch）、`gradus-ac-*`（AppContainer scratch）；
+- scratch 目录带 `.owner`（创建者 pid）：owner 已死立刻删，owner 还活着就保留；AppContainer 已冻结、没有标记，按 7 天窗口兜底；
+- `gradus-mcp-*` 是一次性产物，超过 1 天就删；
+- 删除失败只跳过，不影响会话；结果不进 `sandbox_orphans`，避免每次启动刷屏；
+- 副本 `gradus-ws-*` 不走这里，仍按 `.owner` + pid 由 `workspace.cleanup_orphans` 处理（它能区分用户，比时间窗口准）。
+
+`restricted` 后端的已知约束：
 
 - 只在 Windows 可用；`problem()` 给出原因时同样按「禁用命令类工具 + 告警」处理；
+- **不阻断网络**，也没有 `sandbox_network` 开关；CLI 横幅固定写 `network NOT isolated`；
+- 受限 SID 清单只放合成 SID、logon SID 与 `Everyone`，**不能放当前用户 SID**——那会把用户能写的位置全部放行。清单里只有合成 SID 时进程起不来（`0xC0000142`，DLL 初始化失败）；补上 logon SID 与 `Everyone` 后正常（没有单独拆验是哪一条必需）；
+- 合成 SID 没在系统里注册，`icacls *<SID>` 报 1332（no mapping）；授 / 撤 ACE 走 PowerShell 的 `Get-Acl` / `Set-Acl` 配 `SecurityIdentifier` 对象；
+- logon SID 指向 `GetTokenInformation(TokenGroups)` 缓冲区内部，不能 `LocalFree`，否则进程堆损坏（`0xC0000374`）；
+- ACE 只落在副本与 scratch 上，两者随会话删除，所以没有 profile、没有 `acl-grants.json`，`--reset-sandbox` 不需要处理它；`aclose` 仍先撤 ACE，避免合并失败保留副本时留下能写的目录；
+- 副本所在位置必须让受限 SID 可写：`%TEMP%` 被重定向到 `C:\Windows\Temp` 这类目录时，父目录的 traverse 只对登录用户开放，写会被拒（IDE 终端里就是这样，实机测试要先把 `TEMP` 指到用户临时目录）；
+- 最小环境块把 `TEMP` / `TMP` / `USERPROFILE` / `APPDATA` 都指到 scratch；工具往这些地方写会落到 scratch；
+- 进程放进 Job Object（`KILL_ON_JOB_CLOSE`），父进程一死子进程连带退出。
+
+`appcontainer`（已弃用）的已知约束：
+
+- 只在 Windows 可用；`problem()` 给出原因时同样按「禁用类命令工具 + 告警」处理；
+- 副本目录必须让 AppContainer 能 traverse：`%TEMP%` 落在用户 profile 下（`C:\Users\<user>\AppData\Local\Temp`）时，AppContainer 设不了工作目录，PowerShell 退回 `C:\`、相对路径全失效；实机验证要在 `TEMP=C:\Windows\Temp` 下跑。`restricted` 不受这条限制；
 - 没有网络能力开关：AppContainer 不给 capability 时默认断网，`sandbox_network` 被忽略并给出 warning；
 - 容器里没有 Git Bash（安装目录不在授权范围），因此只注册 `powershell`；
 - 命令里删文件要用 .NET：`Remove-Item` / `cmd del` 在 AppContainer 里一律 `Access is denied`（目录已授 `M` 甚至 `F` 也一样），`[System.IO.File]::Delete()` / `[System.IO.Directory]::Delete()` 正常；改目录权限、`DE,DC` 都不能绕过这一条。文件工具不受影响：`delete_file` 走宿主进程删副本里的文件，不经过 AppContainer；
@@ -243,24 +267,28 @@ OAuth 登录（M12 续）：
 - 临时目录与 `%LOCALAPPDATA%\gradus` 按用户分开（Windows 默认 `C:\Users\<user>\AppData\Local\...`），副本、scratch、ACL 记录、解释器标记都落在里面；
 - AppContainer profile 名带用户摘要（`gradus-sandbox-<hash>`）：SID 只由名字派生、不含用户，固定名字会让同机所有用户共用同一个 SID，共享 workspace 上的 ACE 就会互相生效；现在两个用户各拿各的 SID；
 - 清理只碰自己的：副本 `.owner` 记录 pid + 用户名，Docker 容器带 `gradus.user` 标签；pid 存活、或用户名不匹配都跳过；
-- `gradus --reset-sandbox`：显式清掉强杀残留、`acl-grants.json`、`acl-*.done` 标记与 AppContainer profile；检测到别的 Gradus 进程还在用 appcontainer 时拒绝执行（删 profile 会让它的 SID 失效）；
+- `gradus --reset-sandbox`：显式清掉强杀残留、`acl-grants.json`、`acl-*.done` 标记与 AppContainer profile；检测到别的 Gradus 进程还在用 appcontainer 时拒绝执行（删 profile 会让它的 SID 失效）。`restricted` 没有持久状态，不受这个命令影响；
 - 这不等于服务化多租户：同一用户的两个会话仍共享一个 profile 与一份 ACL 记录，文件权限跟随 OS 用户，不按会话再切一层。要做「一个服务进程接待多个互不可信的租户」，需要每租户独立进程 / 容器与独立凭证，属于另一层架构。
 
 ### 5.5.1 沙箱使用契约
 
-改沙箱相关代码（`sandbox.py` / `appcontainer.py` / `workspace.py` / `session.py` 的沙箱接线）时按下表核对，不要靠手工试。**每次改动前后各跑一次**：
+改沙箱相关代码（`sandbox.py` / `restricted.py` / `win32.py` / `appcontainer.py` / `workspace.py` / `session.py` 的沙箱接线）时按下表核对，不要靠手工试。**每次改动前后各跑一次**：
 
 ```powershell
 uv run pytest -q                                         # 离线契约
 $env:GRADUS_SANDBOX_LIVE="1"
-uv run python -m pytest gradus/coding/tests/test_sandbox_live.py -q -s   # 实机契约
+uv run python -m pytest gradus/coding/tests/test_sandbox_live.py -q -s   # 实机契约（缺省 restricted）
+$env:GRADUS_SANDBOX_BACKEND="appcontainer"               # 换后端再跑一遍
 uv run gradus --reset-sandbox                            # 怀疑授权 / profile 坏了时先清一次
 ```
 
-实机检查覆盖并逐条打印：副本位置与工作目录、相对路径读写、已跟踪 / 未跟踪文件可见、越界读写被拒、删除、断网、超时、codemode、关闭时合回（新增 / 修改 / 删除）、孤儿副本清理。它跑不过就是契约被破坏，不需要再写一次性探针脚本。
+实机检查覆盖并逐条打印：副本位置与工作目录、相对路径读写、已跟踪 / 未跟踪文件可见、越界读写、删除、断网、超时、codemode、关闭时合回（新增 / 修改 / 删除）、孤儿副本清理。读与断网两条按后端不同：`restricted` 允许读副本之外、不阻断网络，`appcontainer` 两者都拦。它跑不过就是契约被破坏，不需要再写一次性探针脚本。
 
 | 约束 | 原因 | 违反后的症状 | 实机检查 |
 | --- | --- | --- | --- |
+| 受限 SID 清单必须含 logon SID 与 `Everyone`，且不能含当前用户 SID | 只有合成 SID 时 DLL 无法初始化；含用户 SID 则用户能写的位置全部放行 | 进程立刻退出（`0xC0000142`）或写边界失效 | `test_cwd_and_relative_paths`、`test_reads_and_writes_outside_are_denied` |
+| logon SID 不能 `LocalFree` | 它指向 `GetTokenInformation` 缓冲区内部 | 进程堆损坏（`0xC0000374`），`aclose` 时崩溃 | `test_sandbox.py` + 实机关闭会话 |
+| 合成 SID 的 ACE 用 `Set-Acl`，不要用 `icacls *SID` | 未注册的 SID 让 icacls 报 1332 | 授权失败，副本不可写 | 实机 `test_cwd_and_relative_paths` |
 | 副本必须直接位于临时目录下一层 | AppContainer 进程在更深目录里设不了工作目录 | PowerShell 退回 `C:\`，`Test-Path .` / 相对路径全部失败 | `test_backend_and_copy_location`、`test_cwd_and_relative_paths` |
 | 命令里删文件只能用 `[IO.File]::Delete`；文件删除用 `delete_file` | `Remove-Item` / `cmd del` 在 AppContainer 里被平台拒绝，授 `M` / `F` / `DE,DC` 都不行；`delete_file` 走宿主进程 | 模型 `rm` 失败，删除类操作整体不可用 | `test_delete_works_through_dotnet`、`test_delete_file_tool_removes_on_host` |
 | worktree 必须另外带进未跟踪文件 | `git worktree add` 只检出 HEAD，`.env`、本地脚本不在任何 commit 里 | 模型看不到这些文件，命令报路径不存在 | `test_existing_and_untracked_files_are_visible` |
@@ -275,14 +303,14 @@ uv run gradus --reset-sandbox                            # 怀疑授权 / profil
 使用方式（不要在契约之外自己拼）：
 
 ```python
-one = await session.Session.connect(settings, workspace=root)  # sandbox=auto -> appcontainer -> docker -> local
+one = await session.Session.connect(settings, workspace=root)  # sandbox=auto -> restricted -> appcontainer -> docker -> local
 one.sandbox_workspace    # 副本路径；local 或兜底时为 None
 one.sandbox_orphans      # 启动时清掉的残留（容器 / ACE / 副本）
 await one.aclose()       # 先合回宿主，再撤销授权 / 销毁容器，最后删副本
 one.workspace_sync       # 合回结果：applied / deleted / error / kept
 ```
 
-约定之外的事不要做：不要手工 `icacls` 授整棵树、不要自己找 `%TEMP%` 下的副本、不要在关闭后访问副本、不要假设 `Remove-Item` 可用、不要把文件工具指回宿主根、不要在别的会话还在跑时删 AppContainer profile、不要假设 MCP server 在沙箱里执行（只有 stdio server 的缺省 cwd 跟着副本走）。
+约定之外的事不要做：不要手工 `icacls` 授整棵树、不要自己找 `%TEMP%` 下的副本、不要在关闭后访问副本、不要把 `restricted` 当成会断网的沙箱、不要把文件工具指回宿主根、不要在别的会话还在跑时删 AppContainer profile、不要假设 MCP server 在沙箱里执行（只有 stdio server 的缺省 cwd 跟着副本走）。
 
 ## 6. 权限
 

@@ -195,3 +195,13 @@
 - **解决**：`Session.connect` 在连接 MCP 前，把「`command` 非空且 `cwd` 为空」的 server 用不可变 `replace` 换成 `cwd=副本根`（`session._mcp_servers_in`）；原对象不动，刷新重连仍按原配置。显式写了 `cwd` 的保持原样。**没有做中途合并**：`sync()` 只在 `aclose()` 执行，worktree 模式对同一补丁重复 `git apply` 会失败，而且合并后副本继续跑会立刻与宿主分叉。
 - **验证**：`tests/test_session.py::McpSandboxCwdTest`（只改缺省 cwd、显式 cwd 与 HTTP 不动、接入 `Session.connect` 后 server 拿到副本路径）。
 - **关联**：M14、`session.py`、`mcp.py`、`design.md` §5.5。仍不覆盖：HTTP / SSE 没有 cwd，操作宿主；绝对路径参数仍指向宿主；server 进程本身仍在宿主、具备宿主权限和网络——「MCP server 进程入沙箱」留在 `coding_plan.md` M14 待定列。
+
+### restricted 后端首次实机：进程起不来、写不进副本、关闭时崩溃
+
+- **状态**：已解决
+- **现象**：分三次出现——① 子进程立刻退出，`0xC0000142`（DLL 初始化失败），IDE 终端里还会被报成 `TRAE Sandbox Error: code=536870917`；② 进程能起来、能读，但写副本 `Access is denied`；③ 会话关闭时宿主进程 `0xC0000374`（堆损坏）。
+- **触发**：`CreateRestrictedToken` 起进程的第一次实机验证。
+- **原因**：三个独立问题——① 受限 SID 清单只有自己的合成 SID，系统 DLL 的读检查过不去，补上 logon SID 与 `Everyone`（对齐 Codex 的 workspace-write 形态）后正常；② 合成 SID 没在系统里注册，`icacls *<SID>` 报 1332（no mapping），授权根本没写进去；③ logon SID 是 `GetTokenInformation(TokenGroups)` 缓冲区里的指针，`aclose` 里对它 `LocalFree` 造成堆损坏。
+- **解决**：受限 SID 清单改为「合成 SID + logon SID（`TokenGroups` 里 `SE_GROUP_LOGON_ID` 那条）+ `Everyone`」，且不放当前用户 SID（否则用户能写的地方全部放行）；ACE 改用 PowerShell `Get-Acl` / `Set-Acl` 配 `SecurityIdentifier` 对象，绕开 icacls 的名字解析；SID 分两类管——`ConvertStringSidToSidW` 分配的自己释放，logon SID 只保活它所在的缓冲区。
+- **验证**：`GRADUS_SANDBOX_LIVE=1 uv run python -m pytest gradus/coding/tests/test_sandbox_live.py -q -s` → 11 passed / 1 skipped（`restricted`，网络那条按后端跳过）；实机确认副本可写、`C:\Users\Public` 写被拒、`C:\Windows\win.ini` 可读。离线：`tests/test_sandbox.py::RestrictedBackendTest`。
+- **关联**：M16、`restricted.py`、`win32.py`、`design.md` §5.5 与 §5.5.1。另记一条环境限制：`%TEMP%` 被重定向到 `C:\Windows\Temp` 时受限进程写不进副本（父目录 traverse 只对登录用户开放），实机测试需把 `TEMP` 指到用户临时目录；`appcontainer` 反过来只认 `C:\Windows\Temp`。

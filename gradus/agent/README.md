@@ -32,7 +32,7 @@ It does:
 - run a tool batch in parallel only when every tool in it declares `execution_mode="parallel"`; otherwise the whole batch runs serially; results are still written back in source order;
 - stop after a tool batch only when every result sets `terminate=True`; mixed batches continue normally;
 - forward tool progress through `on_update` as `ToolExecutionUpdate`, strictly between `ToolExecutionStart` and `ToolExecutionEnd`;
-- expose `details` / `structured_content` / `usage` only through `ToolExecutionEnd`; they never enter history or the run's token usage;
+- expose `details` / `structured_content` / `usage` only through `ToolExecutionEnd`; they never enter history or the run's token usage (**in testing**: rich results are deferred and the shape may change);
 - run optional hooks before and after a run, before requests, around tools, at turn boundaries, and at the turn limit; no hooks means no behavior change;
 - drain steering before requests and after turns, and follow-up before stopping;
 - guarantee that every tool call gets a matching tool result;

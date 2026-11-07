@@ -1,11 +1,20 @@
-"""执行环境：命令和脚本跑在本地进程，或跑在 Docker 容器里。
+"""执行环境：命令和脚本跑在宿主、Docker 容器，或 Windows AppContainer 里。
 
 设计原则（对齐 Hermes 的 `terminal.backend`）：
 
 - 工具不直接 `create_subprocess_exec`，而是拿一个 `Environment`；
-- 只有两种后端：`local`（现状）与 `docker`（共享 workspace 的读写挂载）；
+- 三种后端：`local`（宿主）、`docker`（长驻容器，**测试中**）、
+  `restricted`（Windows 受限令牌，写只能在副本里）与 `appcontainer`
+  （Windows 零安装，**已弃用**，见 `appcontainer.py`）；
 - Docker 后端默认断网、限制内存 / CPU / 进程数、不继承宿主环境变量；
 - 拿不到 Docker 时**不回落 local**：由调用方禁用命令类工具并告警。
+
+Docker 的状态是**测试中**：接口和离线断言都在，但还没在真实 Docker 引擎上
+跑完实机契约；Docker 只作为跨平台备用保留。
+
+Windows 的目标后端是 `restricted`（`restricted.py`）：读按当前用户、写只落在
+副本与 scratch，不需要管理员。它**不阻断网络**，这是 unelevated 方案的固有
+短板。`appcontainer` 是 **已弃用** 层：保留可用、不再演进。
 
 容器内的路径约定：
 
@@ -25,6 +34,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Protocol
@@ -35,7 +45,7 @@ DEFAULT_MEMORY = "2g"
 DEFAULT_CPUS = "2"
 DEFAULT_PIDS = "512"
 
-BACKENDS = ("local", "docker", "appcontainer")
+BACKENDS = ("local", "docker", "appcontainer", "restricted")
 
 CONTAINER_WORKSPACE = "/workspace"
 CONTAINER_TMP = "/gradus-tmp"
@@ -94,7 +104,7 @@ class LocalEnvironment:
 
     def scratch_dir(self) -> Path:
         if self._scratch is None:
-            self._scratch = Path(tempfile.mkdtemp(prefix="gradus-tmp-"))
+            self._scratch = create_scratch("gradus-tmp-")
         return self._scratch
 
     def map_path(self, path: str | Path) -> str:
@@ -133,7 +143,12 @@ class LocalEnvironment:
 
 
 class DockerEnvironment:
-    """长驻容器 + `docker exec`：用 Docker Desktop / Engine 提供边界。"""
+    """长驻容器 + `docker exec`：用 Docker Desktop / Engine 提供边界。
+
+    **测试中**：当前首选后端是 `appcontainer`（Windows 零安装），Docker 只
+    作为跨平台备用保留。这条路径只有离线断言与参数拼装测试，还没在真实
+    Docker 引擎上跑完 `test_sandbox_live.py` 的实机契约，接口与行为可能调整。
+    """
 
     name = "docker"
 
@@ -353,6 +368,97 @@ async def cleanup_orphans(
         if code == 0:
             removed.append(container[:12])
     return removed
+
+
+#: 我们在临时目录里写下的东西；只按这些前缀回收，别的一概不碰。
+TEMP_PREFIXES = ("gradus-mcp-", "gradus-tmp-", "gradus-ac-", "gradus-rs-")
+
+#: scratch 目录里的 owner 标记：记录创建它的 pid，强杀后下次启动可直接回收。
+SCRATCH_MARKER = ".owner"
+
+#: MCP 结果落盘是一次性产物，一天后即可回收。
+TEMP_FILE_MAX_AGE = 24 * 60 * 60
+
+#: 没有 owner 标记的 scratch 目录只按时间兜底（AppContainer 已冻结，补不了标记）。
+TEMP_DIR_MAX_AGE = 7 * 24 * 60 * 60
+
+
+def create_scratch(prefix: str) -> Path:
+    """建会话 scratch 目录并写下 owner pid。"""
+    path = Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        (path / SCRATCH_MARKER).write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        pass
+    return path
+
+
+def cleanup_temp(
+    *,
+    root: Path | None = None,
+    now: float | None = None,
+) -> tuple[str, ...]:
+    """回收临时目录里我们自己留下的东西：MCP 落盘结果与强杀留下的 scratch 目录。
+
+    只按前缀判断。scratch 目录带 owner pid：owner 已死就立刻删，owner 还活着就
+    保留；没有标记的（AppContainer 那侧已冻结）按 7 天窗口兜底。MCP 落盘文件是
+    一次性产物，超过 1 天就删。删除失败（被占用、权限）就跳过，下次再试。
+    """
+    directory = root if root is not None else Path(tempfile.gettempdir())
+    current = time.time() if now is None else now
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return ()
+
+    removed: list[str] = []
+    for path in entries:
+        if not path.name.startswith(TEMP_PREFIXES):
+            continue
+        try:
+            is_dir = path.is_dir()
+            if is_dir and _owner_pid(path) is not None:
+                if _pid_alive(_owner_pid(path) or 0):
+                    continue
+            else:
+                limit = TEMP_DIR_MAX_AGE if is_dir else TEMP_FILE_MAX_AGE
+                if current - _latest_mtime(path) < limit:
+                    continue
+            if is_dir:
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink()
+        except OSError:
+            continue
+        if not path.exists():
+            removed.append(path.name)
+    return tuple(removed)
+
+
+def _owner_pid(path: Path) -> int | None:
+    try:
+        return int((path / SCRATCH_MARKER).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _latest_mtime(path: Path) -> float:
+    """目录取子树里最新的 mtime：会话还在写，就不算旧。"""
+    try:
+        latest = path.stat().st_mtime
+    except OSError:
+        return 0.0
+    if not path.is_dir():
+        return latest
+    try:
+        for child in path.rglob("*"):
+            try:
+                latest = max(latest, child.stat().st_mtime)
+            except OSError:
+                continue
+    except OSError:
+        return latest
+    return latest
 
 
 def current_user() -> str:
