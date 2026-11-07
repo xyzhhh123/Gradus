@@ -13,6 +13,7 @@ export interface SessionsApi {
   renameSession(id: string, title: string): void
   deleteSession(id: string): void
   browseWorkspace(path: string): void
+  pickWorkspace(path: string): void
   selectModel(id: string): void
 }
 
@@ -40,6 +41,7 @@ export const sessionsPlugin: Plugin = {
       renameSession: (id, title) => ctx.connection.send({ type: 'session/rename', id, title }),
       deleteSession: id => ctx.connection.send({ type: 'session/delete', id }),
       browseWorkspace: path => ctx.connection.send({ type: 'workspace/browse', path }),
+      pickWorkspace: path => ctx.connection.send({ type: 'workspace/pick', path }),
       selectModel: id => ctx.connection.send({ type: 'model/select', id }),
     }
 

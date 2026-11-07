@@ -40,7 +40,13 @@ from ..coding.config import (
 )
 from ..coding.mcp import McpConfigError
 from ..coding.session import Session, SessionError
-from .wire import encode_event, model_summary, snapshot_payload
+from .wire import (
+    CAPABILITIES as BASE_CAPABILITIES,
+    PICK_CAPABILITY,
+    encode_event,
+    model_summary,
+    snapshot_payload,
+)
 
 DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
@@ -53,6 +59,51 @@ NO_BUILD_PAGE = """<!doctype html>
 <p>开发时可以改用 <code>npm run dev</code>，它会代理 <code>/ws</code> 到 127.0.0.1:8765。</p>
 </body>
 """
+
+
+def native_picker_available() -> bool:
+    """宿主能否弹系统「选择文件夹」对话框；启动时判定一次。
+
+    和 dsh 的 `directory-picker-auto` 同构：服务不了就明确拒绝，不做近似。
+    没有显示会话时（纯 SSH、无 X/Wayland）即使弹了也没人看得见。
+    """
+    if sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        return False
+    try:
+        import tkinter  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def pick_directory(initial: str = "") -> str | None:
+    """弹系统对话框选一个文件夹，返回绝对路径；用户取消返回 `None`。
+
+    tkinter 要求「创建与使用在同一个线程」，所以整段跑在 `asyncio.to_thread`
+    的工作线程里：既不阻塞事件循环，也不跨线程碰 Tk 对象。
+    """
+    from tkinter import Tk, filedialog
+
+    root = Tk()
+    root.withdraw()  # 只要对话框，不要那个空的根窗口
+    root.attributes("-topmost", True)  # 否则容易开在浏览器后面
+    try:
+        options: dict[str, Any] = {"parent": root, "title": "选择工作区"}
+        if initial:
+            options["initialdir"] = initial
+        chosen = filedialog.askdirectory(**options)
+    finally:
+        root.destroy()
+    return str(Path(chosen)) if chosen else None
+
+
+#: 原生目录选择是可选能力：探测不过时不报给前端，前端继续用应用内目录树。
+NATIVE_PICKER = native_picker_available()
+
+#: 快照里报出的能力表；`workspace/pick` 缺席时前端不显示「浏览…」。
+CAPABILITIES = BASE_CAPABILITIES + ((PICK_CAPABILITY,) if NATIVE_PICKER else ())
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -165,7 +216,7 @@ class Connection:
             return
 
         try:
-            await self.send("session/snapshot", snapshot_payload(self.session))
+            await self.send("session/snapshot", snapshot_payload(self.session, CAPABILITIES))
             await self.send_sessions()
             await self.send_model_state()
             while True:
@@ -541,7 +592,7 @@ class Connection:
             )
             return
 
-        await self.send("session/snapshot", snapshot_payload(self.session))
+        await self.send("session/snapshot", snapshot_payload(self.session, CAPABILITIES))
         await self.send_sessions()
         await self.send_model_state()
         await self.send("session/status", {"status": "idle"})
@@ -630,6 +681,8 @@ class Connection:
             await self.handle_read(str(command.get("path") or ""))
         elif kind == "workspace/browse":
             await self.handle_browse(str(command.get("path") or ""))
+        elif kind == "workspace/pick":
+            await self.handle_pick(str(command.get("path") or ""))
         elif kind == "interaction/answer":
             self.confirm.resolve(str(command.get("id") or ""), bool(command.get("ok")))
 
@@ -687,6 +740,22 @@ class Connection:
             await self.send("workspace/error", {"message": str(exc)})
             return
         await self.send("workspace/dirs", payload)
+
+    async def handle_pick(self, path: str) -> None:
+        """原生「选择文件夹」；结果仍走 `workspace/dirs`，前端当成一次普通跳转。"""
+        if not NATIVE_PICKER:
+            await self.send(
+                "workspace/error", {"message": "当前环境没有可用的系统目录对话框"}
+            )
+            return
+        try:
+            chosen = await asyncio.to_thread(pick_directory, path)
+        except Exception as exc:  # Tk 起不来的方式很多，报给前端而不是静默失败
+            await self.send("workspace/error", {"message": f"打开目录选择器失败：{exc}"})
+            return
+        if chosen is None:
+            return  # 用户取消：不发帧，对话框保持原样
+        await self.handle_browse(chosen)
 
     async def run_prompt(self, text: str) -> None:
         session = self.session

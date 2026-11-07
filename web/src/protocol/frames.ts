@@ -7,6 +7,9 @@
 
 export const PROTOCOL_VERSION = 1
 
+/** 宿主能弹系统「选择文件夹」对话框时才出现在 `capabilities` 里。 */
+export const CAPABILITY_PICK = 'workspace/pick'
+
 export interface Frame<T = unknown> {
   /** 单调递增，从 1 开始；快照固定为 0。 */
   seq: number
@@ -159,7 +162,11 @@ export interface FsFilePayload {
   truncated: boolean
 }
 
-/** 工作区选择对话框：`path` 为空时 `dirs` 是可选起点（盘符 / 主目录）。 */
+/**
+ * 工作区选择对话框：`path` 为空时 `dirs` 是可选起点（盘符 / 主目录）。
+ * `workspace/pick`（原生对话框）的结果也以这个帧回来；取消时不发帧，
+ * 不可用或失败则以 `workspace/error` 回来。
+ */
 export interface BrowsePayload {
   path: string
   parent: string | null
@@ -185,3 +192,4 @@ export type ClientCommand =
   | { type: 'fs/list'; path: string }
   | { type: 'fs/read'; path: string }
   | { type: 'workspace/browse'; path: string }
+  | { type: 'workspace/pick'; path: string }

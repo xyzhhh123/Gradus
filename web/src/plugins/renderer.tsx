@@ -24,6 +24,7 @@ export const rendererPlugin: Plugin = {
       renameSession: (id, title) => ctx.sessions.renameSession(id, title),
       deleteSession: id => ctx.sessions.deleteSession(id),
       browseWorkspace: path => ctx.sessions.browseWorkspace(path),
+      pickWorkspace: path => ctx.sessions.pickWorkspace(path),
       selectModel: id => ctx.sessions.selectModel(id),
     }
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Plugin } from '@deepseek-ai/cordis'
-import type { SessionInfo } from '../protocol/frames'
+import { CAPABILITY_PICK, type SessionInfo } from '../protocol/frames'
 import type { RootProps, SessionActions } from '../render/types'
 import { ChevronIcon, FolderIcon, PencilIcon, PlusIcon, SparkIcon, TrashIcon } from '../icons'
 
@@ -210,6 +210,8 @@ function WorkspaceDialog({
 }) {
   const [recent] = useState(recentWorkspaces)
   const browse = state.browse
+  // 原生对话框是可选能力：后端探测不过时不显示这个入口，只用应用内目录树。
+  const canPick = state.capabilities.includes(CAPABILITY_PICK)
 
   const go = (path: string) => {
     onDraft(path)
@@ -222,40 +224,29 @@ function WorkspaceDialog({
         <div className="dialog-head">
           <span>选择工作区</span>
           <span className="sidebar-spacer" />
+          {canPick && (
+            <button
+              type="button"
+              className="dialog-pick"
+              title="用系统对话框选择文件夹"
+              onClick={() => actions.pickWorkspace(browse?.path ?? state.workspace)}
+            >
+              浏览…
+            </button>
+          )}
           <button type="button" className="sidebar-toggle" title="关闭" onClick={onClose}>
             ×
           </button>
         </div>
 
-        <form
-          className="dialog-form"
-          onSubmit={event => {
-            event.preventDefault()
-            go(draft)
-          }}
-        >
-          <input
-            autoFocus
-            value={draft}
-            placeholder="输入绝对路径后回车"
-            onChange={event => onDraft(event.target.value)}
-          />
-          <button type="submit">前往</button>
-        </form>
-
-        {recent.length > 0 && (
-          <div className="workspace-recent">
-            {recent.map(path => (
-              <button key={path} type="button" onClick={() => go(path)}>
-                {path}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {state.browseError && <div className="explorer-error">{state.browseError}</div>}
-
+        {/* 点目录是主入口；输入框降到最下面，只当「粘贴路径」的快捷方式。 */}
         <div className="dialog-body">
+          {browse?.path && (
+            <button type="button" className="tree-row" onClick={() => go('')}>
+              <span className="tree-indent" />
+              <span className="tree-name">此电脑</span>
+            </button>
+          )}
           {browse?.parent && (
             <button type="button" className="tree-row" onClick={() => go(browse.parent as string)}>
               <span className="tree-indent" />
@@ -279,6 +270,36 @@ function WorkspaceDialog({
           )}
           {!browse && !state.browseError && <div className="explorer-empty">读取中…</div>}
         </div>
+
+        {state.browseError && <div className="explorer-error">{state.browseError}</div>}
+
+        {recent.length > 0 && (
+          <>
+            <div className="dialog-label">最近</div>
+            <div className="workspace-recent">
+              {recent.map(path => (
+                <button key={path} type="button" onClick={() => go(path)}>
+                  {path}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <form
+          className="dialog-form"
+          onSubmit={event => {
+            event.preventDefault()
+            go(draft)
+          }}
+        >
+          <input
+            value={draft}
+            placeholder="或粘贴绝对路径"
+            onChange={event => onDraft(event.target.value)}
+          />
+          <button type="submit">前往</button>
+        </form>
 
         <div className="dialog-foot">
           <code className="dialog-path">{browse?.path || '选择起点'}</code>

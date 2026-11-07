@@ -1,8 +1,8 @@
 import { useEffect, useSyncExternalStore, useState } from 'react'
 import type { Plugin } from '@deepseek-ai/cordis'
 import type { ConnectionApi } from './connection'
-import { ModelDraft, ProviderEntry, SettingsStatePayload } from '../protocol/frames'
-import { GearIcon, MonitorIcon, MoonIcon, SunIcon, TrashIcon } from '../icons'
+import type { ModelDraft, ProviderEntry, SettingsStatePayload } from '../protocol/frames'
+import { MonitorIcon, MoonIcon, SlidersIcon, SunIcon, TrashIcon } from '../icons'
 import { setPreference, themeStore, type ThemePreference } from '../model/theme'
 
 /**
@@ -153,7 +153,7 @@ function SettingsToggle({ store }: { store: SettingsApi }) {
       title="设置"
       onClick={state.open ? store.close : store.open}
     >
-      <GearIcon />
+      <SlidersIcon />
     </button>
   )
 }
@@ -218,7 +218,7 @@ function SettingsPanel({ store }: { store: SettingsApi }) {
             <ThemeRow />
             <div className="settings-row">
               <span className="settings-label">字号</span>
-              <span className="settings-hint">随窗口宽度自动缩放（14–18px），无需手动设置</span>
+              <span className="settings-hint">随窗口宽度自动缩放（16–20px），无需手动设置</span>
             </div>
           </section>
 

@@ -16,6 +16,8 @@ export interface SessionActions {
   deleteSession(id: string): void
   /** 浏览工作区候选目录；`path` 为空取起点（盘符 / 主目录）。 */
   browseWorkspace(path: string): void
+  /** 弹系统「选择文件夹」对话框；结果仍以 `workspace/dirs` 回来。 */
+  pickWorkspace(path: string): void
   /** 切换到某个候选模型；`id` 来自 `model/state`。 */
   selectModel(id: string): void
 }

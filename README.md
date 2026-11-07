@@ -77,6 +77,35 @@ A key alone cannot identify a provider, so the service, model, and key are confi
 
 Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill:name` expand saved prompts, and `exit` / `Ctrl-D` leaves.
 
+### Run the web UI
+
+Two processes: the Python host and the browser bundle. Start the host first:
+
+```bash
+uv sync --extra web
+uv run gradus-serve --port 8765 --token dev
+```
+
+It prints the address to open, token included:
+
+```
+Gradus web · kimi-k2.7-code · H:\your\workspace
+open: http://127.0.0.1:8765/?token=dev
+```
+
+The token is not optional: `/ws` closes with 4401 without the right one. Drop `--token` and the host generates a random one and prints that URL instead.
+
+Then pick one of:
+
+```bash
+cd web && npm install && npm run build   # host serves web/dist — open the printed address
+cd web && npm run dev                    # Vite on :5173, proxies /ws to 127.0.0.1:8765
+```
+
+With the dev server, open `http://localhost:5173/?token=dev`: the frontend reads `token` from the page URL, so it has to match `--token`. Adding `&mock=1` loads the UI against a scripted connection with no host at all.
+
+Restart the host after editing anything under `gradus/`; the frontend reloads on save by itself.
+
 ### Switching models (web)
 
 `~/.gradus/config.json` (or whatever `--config` points at) may carry a candidate list; the web model picker reads it directly:

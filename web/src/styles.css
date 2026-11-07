@@ -72,10 +72,10 @@
   /* 尺寸 */
   /*
    * 字号基准随窗口宽度自动缩放（不再让用户手动调）：
-   *   1440px -> 14px，1920px -> 15.8px，2560px 起封顶 18px；窄屏不低于 14px。
+   *   1440px -> 16px（触下限），1920px -> 17px，2560px 起封顶 20px；窄屏不低于 16px。
    * 其余字号、代码字号与正文列宽都由它派生，所以只有这一个变量需要维护。
    */
-  --content-font: clamp(14px, calc(8.9px + 0.357vw), 18px);
+  --content-font: clamp(16px, calc(9px + 0.4167vw), 20px);
   --code-font: calc(var(--content-font) - 1.5px);
   --fs-11: calc(var(--content-font) - 3px);
   --fs-11_5: calc(var(--content-font) - 2.5px);
@@ -1463,10 +1463,34 @@ button:disabled {
   font-weight: 500;
 }
 
+/* 原生「选择文件夹」是可选项；后端探测不过时这个按钮根本不渲染。 */
+.dialog-pick {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--bg-layer-3);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.dialog-pick:hover {
+  background: var(--active);
+  color: var(--text-1);
+}
+
+/* 目录浏览是主入口，下面的「最近」与「粘贴路径」都是次要入口。 */
+.dialog-label {
+  padding: 8px 12px 4px;
+  border-top: 1px solid var(--border-1);
+  font-size: var(--fs-11);
+  color: var(--text-caption);
+}
+
 .dialog-form {
   display: flex;
   gap: 6px;
-  padding: 10px 12px 6px;
+  padding: 8px 12px;
 }
 
 .dialog-form input {

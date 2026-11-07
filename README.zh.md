@@ -77,6 +77,35 @@ uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docke
 
 交互模式里：`/reload` 重载工具与扩展，`/命令` 与 `/skill:名字` 展开保存的提示词，`exit` / `Ctrl-D` 退出。
 
+### 跑 Web 界面
+
+前后端是两个进程。先起后端：
+
+```bash
+uv sync --extra web
+uv run gradus-serve --port 8765 --token dev
+```
+
+它会打印要打开的地址，token 已带上：
+
+```
+Gradus web · kimi-k2.7-code · H:\你的\工作区
+open: http://127.0.0.1:8765/?token=dev
+```
+
+token 不是可选项：对不上时 `/ws` 直接以 4401 断开。不传 `--token` 就随机生成一个，并打印带它的地址。
+
+然后二选一：
+
+```bash
+cd web && npm install && npm run build   # 产物落在 web/dist，由后端直接托管，打开上面那个地址即可
+cd web && npm run dev                    # Vite 跑在 :5173，把 /ws 代理到 127.0.0.1:8765
+```
+
+走 dev server 时打开 `http://localhost:5173/?token=dev`：前端从页面 URL 里取 `token` 转发给 WebSocket，所以要和 `--token` 一致。再加个 `&mock=1` 就能不连后端、对着模拟连接看界面。
+
+改了 `gradus/` 下的代码要重启后端；前端保存后自己热更新。
+
 ### 多模型切换（Web）
 
 `~/.gradus/config.json`（或 `--config` 指向的文件）可以额外列一张候选表，Web 界面的模型选择器直接读它：

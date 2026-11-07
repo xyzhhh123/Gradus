@@ -141,7 +141,7 @@
   - 新增设置面板（顶栏齿轮）：`settings/get|save` 读写配置文件的 `models` 候选表，写回走「临时文件 + 校验 + `os.replace`」，空 key 沿用原文件同位置的值；`services` 给内置服务商快捷名，`hasKey` 只报真假、不回显 key。这样加候选不需要手改 JSON。
   - 选择记到配置文件顶层 `active`：切换成功后 `save_active` 落盘，启动与重读时 `with_active` 按名字切回 `spec`，重启后仍停在同一个模型上；名字对不上就保持顶层配置的模型，保存候选表时顺手清掉失效的 `active`。
   - 右栏改为多文件标签：`files[] + activePath`，同路径只留一份，逐个关闭，关当前项后自动退到相邻标签或目录树。
-  - 字号不再手动调：单一基准 `--content-font` 随视口取 `clamp(14px, 8.9px + 0.357vw, 18px)`（1440→14 / 1920→15.8 / 2560 起封顶 18），`--code-font` / `--fs-*` / `--content-width` 全部由它派生；删掉步进器与 `web/src/model/fonts.ts`。
+  - 字号不再手动调：单一基准 `--content-font` 随视口取 `clamp(16px, 9px + 0.4167vw, 20px)`（1440→16 / 1920→17 / 2560 起封顶 20），`--code-font` / `--fs-*` / `--content-width` 全部由它派生；删掉步进器与 `web/src/model/fonts.ts`。
 - **验证**：
   - 同一会话内真实切换三种协议（kimi 的 compat / anthropic / responses，同一 key、`local` 沙箱）：先让模型记住 41，切到 anthropic 答 `'41'`，再切到 responses 仍答 `'41'`，历史为 6 条交替的 user/assistant。
   - `gradus/coding/tests/test_config.py` 新增候选表解析、`with_choice` 沿用 key、缺地址报错、未知字段报错，以及 `active` 生效 / 失效回落 / `save_active` 往返 / 保存候选表清失效 `active` / `active` 类型校验共 9 个用例；`uv run pytest` 全量 626 passed。
@@ -162,6 +162,30 @@
   - 设置页「外观」段加三个按钮（`ThemeRow` + 三个新图标），选中态跟随「已保存的偏好」而非解析后的颜色。
 - **验证**：`npm run build`（含 `tsc --noEmit`）通过；`?mock` 开发服务器可正常加载、浏览器无报错。浅 / 深 / 跟随系统三态与刷新后保持只做了构建期与加载期检查，未逐项实机点选。
 - **关联**：`web/src/styles.css`、`web/src/model/theme.ts`、`web/src/plugins/settings.tsx`、`web/src/icons.tsx`、`web/index.html`。
+
+### 选择工作区像只能手输路径，而且到不了 C: 以外的盘符
+
+- **状态**：已解决
+- **现象**：工作区对话框像只能手打绝对路径，点不出资源管理器里的目录；而且从 `C:\` 出发到不了 D 盘。
+- **触发**：点侧栏的工作区按钮。
+- **原因**：① 输入框带 `autoFocus` 又排在目录列表上方，主次颠倒，看起来只能手输。② 起点（盘符列表）只在 `workspace/browse` 收到空路径时返回，而对话框打开时传的是当前工作区；从 `C:\` 点 `..` 会停在 `C:\`（`parent == current`），所以没有任何一条路能回到盘符列表。
+- **解决**：目录列表提到最上，输入框降级成最下面的「或粘贴绝对路径」；顶部加一行常驻「此电脑」→ 空路径，盘符列表重新可达；「最近」单独成段。
+- **验证**：`npm run build`（含 `tsc --noEmit`）通过，`?mock` 加载无报错；未在真实盘符之间逐档点选。
+- **关联**：`web/src/plugins/layout.tsx`、`web/src/styles.css`、`gradus/host/serve.py`（`browse_roots`）。系统原生对话框见下一条。
+
+### 工作区只能靠应用内目录树，弹不出系统「选择文件夹」
+
+- **状态**：已解决
+- **现象**：选工作区只有应用内那棵目录树，不能像 dsh 那样直接调出系统的文件夹选择框。
+- **触发**：点侧栏的工作区按钮。
+- **原因**：把「浏览器拿不到磁盘绝对路径」错误外推成了「整个应用都做不到」。浏览器确实不行（`webkitdirectory` 只给相对路径、`showDirectoryPicker()` 只给不透明句柄），但 dsh 的对话框根本不是浏览器弹的，是**宿主进程**自己弹的：`packages/host/directory-picker-*` 是一个 seam，`directory-picker-native` 在 macOS 用脚本化 AppKit 的 `NSOpenPanel`、Linux 走 Zenity（KDialog 兜底）、Windows 在子进程里用 koffi 驱动 COM 的 `IFileOpenDialog`；Electron 那条 `dialog.showOpenDialog` 只是 `apps/desktop` 额外的一层壳。Gradus 的宿主就是一个本地 Python 进程，同样弹得出。
+- **解决**：
+  - `host/serve.py` 新增 `pick_directory()`：`tkinter.filedialog.askdirectory()` 取绝对路径，整段经 `asyncio.to_thread` 跑在工作线程（tkinter 要求创建与使用同线程，同时不阻塞事件循环）；隐藏根窗口并置顶，免得开在浏览器后面。
+  - 能力探测 `native_picker_available()` 在**启动时判定一次**（与 dsh 的 `directory-picker-auto` 同构）：Linux 且没有 `DISPLAY` / `WAYLAND_DISPLAY`（纯 SSH）直接判否，再试 `import tkinter`，失败即判否。判否就把 `workspace/pick` 从快照的 `capabilities` 里去掉——**服务不了就明确拒绝，不做近似**。
+  - 新增客户端命令 `workspace/pick`，结果复用现成的 `workspace/dirs`（前端就当用户点了一次目录跳转，零新状态）；取消不发帧，不可用或 Tk 起不来回 `workspace/error`。
+  - 前端把快照的 `capabilities` 存进 `SessionState`，`WorkspaceDialog` 头部按 `CAPABILITY_PICK` 决定要不要渲染「浏览…」按钮。
+- **验证**：`uv run pytest gradus/host/tests` 9 passed；`npm run build`（含 `tsc --noEmit`）通过。本机探测 `NATIVE_PICKER == True`、`CAPABILITIES == ('session/message', 'workspace/pick')`，工作线程里建 `Tk()` 正常；桩测 `handle_pick` 四条分支（选中真实目录 → `workspace/dirs` 且路径一致、取消 → 0 帧、选不存在的目录 → `workspace/error 不是目录`、探测判否 → `workspace/error 当前环境没有可用的系统目录对话框`）与 `handle()` 的分发全部符合预期。**真正弹出对话框并点选未实机验证**（需要人手点一下）。
+- **关联**：`gradus/host/serve.py`、`gradus/host/wire.py`、`web/src/protocol/frames.ts`、`web/src/model/state.ts`、`web/src/model/reduce.ts`、`web/src/plugins/layout.tsx`、`web/src/styles.css`、`web/docs/design.md`（§5.2）。
 
 ## 实测覆盖清单
 
@@ -192,7 +216,7 @@
 - **改名会整体重写会话文件**：`rename_session` 先读全文、换头部再 `os.replace`，长会话有额外 IO；期间若有别的进程在追加（同上面的并发写问题），那段内容会丢。
 - **跨目录打开会话的工作区修复**：只做了代码走查，未实机复测（见上文同名条目）。
 - **会话改名 / 删除 / 工作区目录树 / 右栏拖拽**：后端逻辑有临时脚本覆盖，浏览器侧只过了 `tsc` 与打包；本文中已逐项点选的是模型选择器、设置页加候选、右栏多文件标签。
-- **字号随视口自动缩放**：只核对了 `clamp(14px, 8.9px + 0.357vw, 18px)` 的取值与派生变量，未在不同窗口宽度下逐档实机测量。
+- **字号随视口自动缩放**：只核对了 `clamp(16px, 9px + 0.4167vw, 20px)` 的取值与派生变量，未在不同窗口宽度下逐档实机测量。
 - **记住的模型在重启后生效**：配置层（`with_active` / `save_active` / 失效回落）有单测；`handle_model_select` 落盘与重启复现只做了代码走查，未实机复测。
 - **主题三态与防闪烁**：`theme.ts` 的读写与 `system` 订阅、`index.html` 内联脚本只过了构建期检查与 `?mock` 加载；浅 / 深切换、系统深浅切换、刷新后保持均未实机点选。
 - **模型候选的可用性**：`models` 只校验字段与地址格式，不探测端点；切到不可用的候选时错误落在会话状态里，不会在启动时提示。

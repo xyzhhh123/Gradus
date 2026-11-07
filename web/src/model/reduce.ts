@@ -79,6 +79,7 @@ function fromSnapshot(state: SessionState, snapshot: Snapshot): SessionState {
     sandbox: snapshot.sandbox ?? state.sandbox,
     workspace: snapshot.workspace ?? state.workspace,
     model: snapshot.model ?? state.model,
+    capabilities: snapshot.capabilities ?? [],
     turns: [],
     pendingConfirm: null,
     error: null,

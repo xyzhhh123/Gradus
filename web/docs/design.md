@@ -302,8 +302,8 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 | `fs/entries` | 一次目录列表；空串表示工作区根 |
 | `fs/file` | 文件内容，带 `binary` / `truncated` |
 | `fs/error` | 路径越界或读取失败 |
-| `workspace/dirs` | 工作区选择对话框的一次目录列表 `{ path, parent, dirs }`；`path` 为空时是起点（盘符 / 主目录） |
-| `workspace/error` | 浏览目录失败（不存在等） |
+| `workspace/dirs` | 工作区选择对话框的一次目录列表 `{ path, parent, dirs }`；`path` 为空时是起点（盘符 / 主目录）；原生选择的结果也走这一帧 |
+| `workspace/error` | 浏览目录失败（不存在等），或原生选择不可用 |
 | `model/state` | `{ activeId, models, active }`：候选模型与当前选中项，连接后与切换成功后各发一次 |
 | `settings/state` | 设置页输入 `{ path, services, models, current }`；`models` 每项带 `hasKey`，不回显 key |
 | `settings/error` | 设置读取或保存失败，带 `message` |
@@ -322,6 +322,7 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 | `fs/list` | `{ path }`，相对工作区 |
 | `fs/read` | `{ path }`，相对工作区，越界直接拒绝 |
 | `workspace/browse` | `{ path }`，列该目录的子目录；不受当前工作区限制 |
+| `workspace/pick` | `{ path }`（起点提示），弹宿主进程的系统「选择文件夹」对话框；结果以 `workspace/dirs` 回来，取消不发帧。要不要显示这个入口看快照的 `capabilities` 里有没有 `workspace/pick` |
 | `model/select` | `{ id }`，切到 `model/state` 里的某个候选；生成中拒绝 |
 | `settings/get` | 拉设置页输入 |
 | `settings/save` | `{ models }`，整表写回配置文件的 `models`；生成中拒绝 |
@@ -387,7 +388,7 @@ host 只在空闲时接受 `model/select`，成功后回 `model/state`；前端�
 
 ### 5.8 字号
 
-不提供手动字号：唯一基准 `--content-font` 随视口宽度 `clamp(14px, 8.9px + 0.357vw, 18px)` 自动取值（1440px → 14px、1920px → 15.8px、2560px 起封顶 18px，窄屏不低于 14px），`--code-font` 与 `--fs-*` 全部由它 `calc` 派生，`--content-width` 按 `53.4 × --content-font` 同比缩放，所以窗口放大时对话列同步变宽而不是只剩两行。
+不提供手动字号：唯一基准 `--content-font` 随视口宽度 `clamp(16px, 9px + 0.4167vw, 20px)` 自动取值（1440px → 16px、1920px → 17px、2560px 起封顶 20px，窄屏不低于 16px），`--code-font` 与 `--fs-*` 全部由它 `calc` 派生，`--content-width` 按 `53.4 × --content-font` 同比缩放，所以窗口放大时对话列同步变宽而不是只剩两行。
 
 这与 dsh 的做法一致：**px 基准 + 每角色字号变量**，不做 rem 等比体系，也不做整页 `zoom`。面板宽度（侧栏 264–420、右栏 300–70%）仍是 px，拖拽手感不受字号影响。
 

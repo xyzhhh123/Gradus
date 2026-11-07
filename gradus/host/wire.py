@@ -33,6 +33,10 @@ PROTOCOL_VERSION = 1
 # 前端据此判断能不能显示某些内容；暂时只有回显用户消息。
 CAPABILITIES = ("session/message",)
 
+#: 可选能力：宿主能弹系统「选择文件夹」对话框时才会报出去。是否算数由
+#: `host/serve.py` 启动时探测一次决定；前端据此决定要不要显示「浏览…」。
+PICK_CAPABILITY = "workspace/pick"
+
 
 def usage_payload(usage: Usage) -> dict[str, int]:
     return {"inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens}
@@ -116,11 +120,16 @@ def model_summary(settings: Any) -> dict[str, str]:
     return {"name": name, "provider": spec.provider, "model": spec.model}
 
 
-def snapshot_payload(session: Any) -> dict[str, Any]:
-    """连接建立后的第一帧。`session` 是 `gradus.coding.session.Session`。"""
+def snapshot_payload(
+    session: Any, capabilities: tuple[str, ...] = CAPABILITIES
+) -> dict[str, Any]:
+    """连接建立后的第一帧。`session` 是 `gradus.coding.session.Session`。
+
+    `capabilities` 由宿主按当前环境裁剪：服务不了的能力不报，前端就不显示入口。
+    """
     return {
         "protocolVersion": PROTOCOL_VERSION,
-        "capabilities": list(CAPABILITIES),
+        "capabilities": list(capabilities),
         "messages": history_payload(session.messages),
         "status": "idle",
         "tools": [tool.spec.name for tool in session.tools],

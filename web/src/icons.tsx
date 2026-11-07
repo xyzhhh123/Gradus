@@ -129,11 +129,16 @@ export function SparkIcon(props: Props) {
   )
 }
 
-export function GearIcon(props: Props) {
+/**
+ * 设置：两条滑杆（同 dsh 的 `sliders-two-outline`）。
+ * 不用齿轮：16px 下「小圆 + 放射线」会和太阳图标撞脸，主题那一排里分不出来。
+ */
+export function SlidersIcon(props: Props) {
   return (
     <Line {...props}>
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 2.2v1.4M8 12.4v1.4M2.2 8h1.4M12.4 8h1.4M3.9 3.9l1 1M11.1 11.1l1 1M12.1 3.9l-1 1M4.9 11.1l-1 1" />
+      <path d="M2.5 5.5h3.2M8.7 5.5h4.8M2.5 10.5h5.8M11.3 10.5h2.2" />
+      <circle cx="7.2" cy="5.5" r="1.5" />
+      <circle cx="9.8" cy="10.5" r="1.5" />
     </Line>
   )
 }
