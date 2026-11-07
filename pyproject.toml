@@ -12,6 +12,10 @@ dependencies = [
 
 [project.scripts]
 gradus = "gradus.coding.cli:cli"
+gradus-serve = "gradus.host.serve:cli"
+
+[project.optional-dependencies]
+web = ["starlette>=0.41", "uvicorn>=0.32", "websockets>=13"]
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -25,5 +29,5 @@ include = ["gradus*"]
 dev = ["pytest>=8.3"]
 
 [tool.pytest.ini_options]
-testpaths = ["gradus/ai/tests", "gradus/agent/tests", "gradus/coding/tests"]
+testpaths = ["gradus/ai/tests", "gradus/agent/tests", "gradus/coding/tests", "gradus/host/tests"]
 pythonpath = ["."]

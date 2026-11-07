@@ -1,0 +1,419 @@
+/*
+ * 视觉 token 取自 deepseek-harness 的 Web Client（MIT）：
+ *   packages/client/ui-theme/src/styles/design-platform.css  → 颜色、层级
+ *   packages/client/ui-theme/src/styles/base.css             → 字体、圆角、动效
+ * 只抄取用到的子集，不引入整套主题包。
+ */
+
+:root {
+  /* 层级 */
+  --bg-base: rgb(21, 21, 23); /* neutral-bluish-950 */
+  --bg-layer-1: rgb(35, 35, 36); /* neutral-bluish-875 */
+  --bg-layer-2: rgb(44, 44, 46); /* neutral-bluish-850 */
+  --bg-layer-3: rgb(53, 54, 56); /* neutral-bluish-800 */
+  --bg-code: rgb(27, 27, 28); /* neutral-bluish-900 */
+  --bg-menu: rgba(48, 49, 54, 0.64);
+
+  /* 描边 */
+  --border-1: rgba(255, 255, 255, 0.06);
+  --border-2: rgba(255, 255, 255, 0.12);
+  --border-3: rgba(255, 255, 255, 0.16);
+
+  /* 文字 */
+  --text-1: rgb(249, 250, 251); /* neutral-bluish-50 */
+  --text-2: rgb(207, 211, 214); /* neutral-bluish-300 */
+  --text-3: rgb(173, 178, 184); /* neutral-bluish-400 */
+  --text-caption: rgb(129, 133, 140); /* neutral-bluish-600 */
+
+  /* 语义色 */
+  --brand: rgb(122, 170, 255); /* deepseek-400 */
+  --brand-solid: rgb(86, 134, 254); /* deepseek-450 */
+  --warn: rgb(245, 158, 11); /* amber-500 */
+  --warn-bg: rgb(39, 36, 31); /* amber-900 */
+  --danger: rgb(242, 90, 90); /* red-400 */
+  --danger-bg: rgb(242 90 90 / 12%);
+  --success: rgb(34, 197, 94); /* green-500 */
+  --hover: rgba(255, 255, 255, 0.08);
+  --active: rgba(255, 255, 255, 0.14);
+
+  /* 字体 */
+  --font-text: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-code: "SF Mono", "JetBrains Mono", "Fira Code", Consolas,
+    "Liberation Mono", Menlo, Courier, "PingFang SC", "Microsoft YaHei";
+
+  /* 圆角与动效 */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration: 0.2s;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgb(59 130 246 / 40%);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(60, 60, 61);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(84, 85, 87);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 0 20px 24px;
+}
+
+/* ---------- 顶部 ---------- */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 12px;
+  margin-bottom: 8px;
+  background: linear-gradient(var(--bg-base) 70%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.brand {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+
+.pill {
+  font-size: 12px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  color: var(--text-caption);
+  transition: color var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+
+.pill-running {
+  color: var(--brand);
+  border-color: rgb(122 170 255 / 40%);
+}
+
+.pill-error {
+  color: var(--danger);
+  border-color: rgb(242 90 90 / 40%);
+}
+
+/* ---------- 主体 ---------- */
+
+.app-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-caption);
+}
+
+.status-bar .sep {
+  opacity: 0.4;
+}
+
+.status-bar .warn {
+  margin-left: auto;
+  color: var(--warn);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-caption);
+}
+
+.dot-open {
+  background: var(--success);
+}
+
+.dot-connecting {
+  background: var(--warn);
+}
+
+.dot-closed {
+  background: var(--danger);
+}
+
+/* ---------- 对话 ---------- */
+
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  padding: 4px 0 8px;
+}
+
+.message {
+  width: fit-content;
+  max-width: 85%;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-user {
+  align-self: flex-end;
+  background: var(--bg-layer-2);
+  color: var(--text-1);
+}
+
+.message-assistant {
+  align-self: flex-start;
+  background: transparent;
+  padding: 0 2px;
+  color: var(--text-1);
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-1);
+}
+
+.tool {
+  margin: 0;
+}
+
+/* ---------- 工具卡片 ---------- */
+
+.card {
+  margin: 0;
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-md);
+  background: var(--bg-layer-2);
+  overflow: hidden;
+}
+
+.card-running {
+  border-color: rgb(245 158 11 / 35%);
+}
+
+.card-error {
+  border-color: rgb(242 90 90 / 45%);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.card-meta {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-caption);
+}
+
+.card-output {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-code);
+  border-top: 1px solid var(--border-1);
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.card-default {
+  padding: 10px 12px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.usage {
+  font-size: 11px;
+  color: var(--text-caption);
+}
+
+.error {
+  padding: 10px 12px;
+  border: 1px solid rgb(242 90 90 / 40%);
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* ---------- 输入 ---------- */
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  background: var(--bg-layer-2);
+  transition: border-color var(--duration) var(--ease);
+}
+
+.composer:focus-within {
+  border-color: var(--border-3);
+}
+
+.composer textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 10px 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text-1);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.composer textarea::placeholder {
+  color: var(--text-caption);
+}
+
+.composer-actions {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+/* ---------- 按钮 ---------- */
+
+button {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--bg-layer-3);
+  color: var(--text-2);
+  font-family: var(--font-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text-1);
+}
+
+button:active:not(:disabled) {
+  background: var(--active);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.composer button[type="submit"] {
+  background: var(--text-1);
+  color: var(--bg-base);
+  font-weight: 500;
+}
+
+.composer button[type="submit"]:hover:not(:disabled) {
+  background: #fff;
+  color: var(--bg-base);
+}
+
+button.danger {
+  background: transparent;
+  border-color: rgb(242 90 90 / 45%);
+  color: var(--danger);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* ---------- 确认 ---------- */
+
+.approval {
+  padding: 12px 14px;
+  border: 1px solid rgb(245 158 11 / 35%);
+  border-radius: var(--radius-md);
+  background: var(--warn-bg);
+}
+
+.approval-question {
+  margin: 0 0 10px;
+  color: var(--text-1);
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
