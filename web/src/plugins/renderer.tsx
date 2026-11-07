@@ -19,6 +19,12 @@ export const rendererPlugin: Plugin = {
       prompt: text => ctx.sessions.prompt(text),
       cancel: () => ctx.sessions.cancel(),
       answer: (id, ok) => ctx.sessions.answer(id, ok),
+      createSession: workspace => ctx.sessions.createSession(workspace),
+      openSession: id => ctx.sessions.openSession(id),
+      renameSession: (id, title) => ctx.sessions.renameSession(id, title),
+      deleteSession: id => ctx.sessions.deleteSession(id),
+      browseWorkspace: path => ctx.sessions.browseWorkspace(path),
+      selectModel: id => ctx.sessions.selectModel(id),
     }
 
     const renderSlot = (name: string, props: unknown, entryKey?: string) => {

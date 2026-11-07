@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gradus</title>
+    <script>
+      // 在样式生效前先定好主题，避免首帧闪一下另一种颜色。
+      // 存储键与 src/model/theme.ts 保持一致，改一处要改两处。
+      (function () {
+        var dark = false
+        try {
+          var pref = localStorage.getItem('gradus.theme')
+          dark =
+            pref === 'dark' ||
+            (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        } catch (error) {
+          // localStorage 不可用时按跟随系统处理
+          try {
+            dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          } catch (ignored) {
+            dark = false
+          }
+        }
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

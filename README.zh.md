@@ -77,6 +77,26 @@ uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docke
 
 交互模式里：`/reload` 重载工具与扩展，`/命令` 与 `/skill:名字` 展开保存的提示词，`exit` / `Ctrl-D` 退出。
 
+### 多模型切换（Web）
+
+`~/.gradus/config.json`（或 `--config` 指向的文件）可以额外列一张候选表，Web 界面的模型选择器直接读它：
+
+```json
+{
+  "models": [
+    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
+    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
+    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
+  ]
+}
+```
+
+每项支持的连接字段与顶层相同（`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`），`name` 是显示名；不写 `api_key` 就沿用当前 key。候选表只从文件读，环境变量仍只描述当前模型。
+
+不必手改 JSON：Web 顶栏的齿轮打开设置面板，可以增删改候选模型（不回显 key）。最后一次选中的模型会写进顶层 `"active"`，下次启动自动切回去。设置面板的「外观」段还能在浅色 / 深色 / 跟随系统之间切换（存在浏览器 localStorage，不写配置文件）。
+
+切换不新建会话：历史是协议无关的中间表示，由新 provider 自己翻译，所以同一个会话可以在 `openai_compat` / `anthropic` / `openai_responses` 之间来回切。厂商私有字段（如思考块的 `signature`）不会被转换，换家后可能被丢弃或原样透传。
+
 ## 沙箱
 
 | 后端 | 何时使用 | 边界 |

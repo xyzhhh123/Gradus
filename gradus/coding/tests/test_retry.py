@@ -64,7 +64,7 @@ class _FakeAgent:
         self.calls.append("prompt")
         return self._events(self.scripts.pop(0))
 
-    def continue_(self):
+    def continue_(self, prompt=None):
         self.calls.append("continue")
         return self._events(self.scripts.pop(0))
 
@@ -190,9 +190,68 @@ class SessionRetryTest(unittest.IsolatedAsyncioTestCase):
             with patch.object(session, "RetryPolicy", _policy):
                 await self._collect(one)
 
+            # 提问随 new_messages 一起回来，文件里不会缺问题。
             self.assertEqual(log.messages, completed)
             loaded = session.SessionFile.load(log.path)
             self.assertEqual(loaded.messages, completed)
+
+    async def test_prompt_is_logged_with_the_answer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log = session.SessionFile.create(root / "sessions", _settings(), root)
+            answer = AssistantMessage([TextBlock("ok")], stop_reason="stop")
+            agent = _FakeAgent([[_done(new_messages=[UserMessage("hi"), answer])]])
+            one = _session(agent, log)
+
+            await self._collect(one)
+
+            self.assertEqual(len(log.messages), 2)
+            self.assertIsInstance(log.messages[0], UserMessage)
+            self.assertEqual(log.messages[0].content, "hi")
+            self.assertIs(log.messages[1], answer)
+
+    async def test_abort_without_turns_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log = session.SessionFile.create(root / "sessions", _settings(), root)
+            agent = _FakeAgent([[_error(kind="aborted", message="cancelled")]])
+            one = _session(agent, log)
+
+            await self._collect(one)
+
+            self.assertEqual(log.messages, [])
+
+    async def test_final_failure_without_turns_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log = session.SessionFile.create(root / "sessions", _settings(), root)
+            agent = _FakeAgent([[_error(message="HTTP 401: bad key")]])
+            one = _session(agent, log)
+
+            with patch.object(session, "RetryPolicy", _policy):
+                await self._collect(one)
+
+            # 没有回答就不写提问，否则恢复时会多出一条没人回答的问题。
+            self.assertEqual(log.messages, [])
+
+    async def test_retry_after_empty_failure_writes_prompt_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log = session.SessionFile.create(root / "sessions", _settings(), root)
+            answer = AssistantMessage([TextBlock("ok")], stop_reason="stop")
+            agent = _FakeAgent(
+                [
+                    [_error(message="HTTP 503: busy")],
+                    [_done(new_messages=[UserMessage("hi"), answer])],
+                ]
+            )
+            one = _session(agent, log)
+
+            with patch.object(session, "RetryPolicy", _policy):
+                await self._collect(one)
+
+            self.assertEqual(agent.calls, ["prompt", "continue"])
+            self.assertEqual(log.messages, [UserMessage("hi"), answer])
 
 
 if __name__ == "__main__":

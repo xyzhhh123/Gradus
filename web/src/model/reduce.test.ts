@@ -65,4 +65,36 @@ describe('reduce', () => {
     const state = initialState()
     expect(reduce(state, frame('unknown/type', {}))).toBe(state)
   })
+
+  it('中止回到就绪，未完成的工具标为已取消', () => {
+    let state = applyEvent(initialState(), { type: 'agent/start' })
+    state = applyEvent(state, { type: 'turn/start', turn: 0 })
+    state = applyEvent(state, {
+      type: 'tool/start',
+      call: { id: 'a', name: 'bash', args: {} },
+    })
+    state = applyEvent(state, { type: 'agent/error', kind: 'aborted', message: 'cancelled' })
+
+    expect(state.status).toBe('idle')
+    expect(state.error).toBeNull()
+    expect(state.turns[0].tools[0].status).toBe('cancelled')
+  })
+
+  it('新消息到达前，上一轮助手文本先并入历史', () => {
+    let state = applyEvent(initialState(), { type: 'agent/start' })
+    state = applyEvent(state, { type: 'turn/start', turn: 0 })
+    state = applyEvent(state, { type: 'assistant/delta', text: '第一轮' })
+    state = reduce(state, frame('session/message', { id: 'u1', role: 'user', text: '第二个问题' }))
+
+    expect(state.messages.map(message => message.text)).toEqual(['第一轮', '第二个问题'])
+    expect(state.turns).toHaveLength(0)
+  })
+
+  it('一轮结束后清掉残留审批', () => {
+    let state = reduce(initialState(), frame('interaction/confirm', { id: 'c1', question: 'ok?' }))
+    expect(state.pendingConfirm).not.toBeNull()
+
+    state = reduce(state, frame('session/status', { status: 'idle' }))
+    expect(state.pendingConfirm).toBeNull()
+  })
 })

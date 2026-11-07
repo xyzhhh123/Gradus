@@ -62,6 +62,8 @@ Precedence: CLI flags (`--service` / `--provider` / `--model` / `--base-url`) > 
 
 `${NAME}` is replaced with an environment variable. Unknown fields, malformed JSON and unset variables are errors; a missing default file simply means "no file".
 
+The file may also carry a `models` array for the web model picker — each entry takes the same connection fields as the top level plus an optional display `name`. A top-level `active` holds the name last picked in the UI and is applied on the next start; when that name is gone, the top-level model is used instead. Environment variables still describe only the current model.
+
 The CLI also reads `<workspace>/.env` on startup. Values in the file win, overriding same-named environment variables; blank values count as unset. Parsing lives in `gradus/ai/envfile.py` and is shared with `ai/scripts/record.py`. The file is organised as one connection per block — `GRADUS_SERVICE` (which implies protocol and `base_url`), `GRADUS_MODEL` and `GRADUS_API_KEY` together, plus `GRADUS_BASE_URL` for custom endpoints. A key alone does not identify the provider, so the endpoint and the key must sit in the same block; switching providers means replacing the whole block.
 
 Once a project is in the MCP trust record, `gradus --untrust [path]` removes it (the current workspace when the path is omitted) and exits.

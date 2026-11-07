@@ -156,6 +156,28 @@ class AgentTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0].kind, "aborted")
 
+    async def test_abort_drops_unanswered_prompt(self):
+        slow = FakeTool("slow", delay=1.0)
+        provider = make_provider(tool_script([("call_0", "slow", {})]))
+        agent = Agent(provider, LoopConfig(system="", tools=[slow]))
+        started = asyncio.Event()
+
+        async def consume() -> None:
+            async for event in agent.prompt("hi"):
+                if (
+                    isinstance(event, ToolExecutionStart)
+                    and event.call.name == "slow"
+                ):
+                    started.set()
+
+        consumer = asyncio.create_task(consume())
+        await asyncio.wait_for(started.wait(), timeout=1)
+        await agent.abort()
+        await consumer
+
+        # 一轮都没完成：问题和半成品都不该留在历史里，否则会串到下一轮。
+        self.assertEqual(agent.messages, ())
+
     async def test_abort_drops_unused_prepare_next_turn_messages(self):
         slow = FakeTool("slow", delay=1.0)
         provider = make_provider(

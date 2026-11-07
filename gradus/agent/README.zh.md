@@ -118,7 +118,7 @@ async for event in run_loop(provider, messages, config):
         print(event.kind, event.message)
 ```
 
-`provider` 由上层构造；`messages` 不会被修改，新增消息从 `AgentDone.new_messages` 取。循环是异步生成器，持久化归上层。
+`provider` 由上层构造；`messages` 不会被修改。`run_loop` 的 `prompt` 参数只拼进本次 transcript；终止事件返回的 `new_messages` 以这条提问开头（一条产出都没有时为空列表），所以 `AgentDone.new_messages` 就是「本轮新增历史」。循环是异步生成器，持久化归上层。
 
 ### 有状态 `Agent`
 

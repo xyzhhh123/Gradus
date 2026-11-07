@@ -978,11 +978,15 @@ class Session:
             async for event in events:
                 if isinstance(event, AgentError):
                     # 失败前已完成的轮次由 agent 写回历史；这里同步落盘，保证文件不落后。
+                    # 取消或首轮就失败时 `new_messages` 为空，提问也视为没说过。
                     self._append(event.new_messages)
                     if attempt < policy.attempts and is_retryable(event):
                         attempt += 1
                         await asyncio.sleep(policy.delay(attempt))
-                        events = self._agent.continue_()
+                        # 一轮都没完成时提问还没进历史，重试要重新带上它。
+                        events = self._agent.continue_(
+                            None if event.new_messages else UserMessage(text)
+                        )
                         retry = True
                         break
                     yield event
@@ -1130,6 +1134,30 @@ class Session:
         self._system = system
         self._context_files = tuple(path for path, _ in context)
         return self._extension_warnings
+
+    async def switch_model(self, settings: Settings) -> None:
+        """换模型：用同一份历史、工具与系统提示重建 `Agent`。
+
+        历史是 provider 无关的中间表示，换协议时由新 provider 自己翻译；
+        工具与系统提示不依赖模型，直接沿用。正在生成时拒绝切换。
+        """
+        if self._closed:
+            raise RuntimeError("session is closed")
+        if self.state == "running":
+            raise SessionError("正在生成，先停止再切换模型")
+
+        agent = await _connect_agent(
+            settings,
+            self._system,
+            self._policy,
+            self._confirm,
+            self._tools,
+            self._tool_search,
+            list(self.messages),
+        )
+        previous, self._agent = self._agent, agent
+        self._settings = settings
+        await previous.aclose()
 
     async def abort(self) -> None:
         """取消当前运行，已完成的轮次保留在历史里。"""

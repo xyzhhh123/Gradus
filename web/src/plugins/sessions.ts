@@ -8,6 +8,12 @@ export interface SessionsApi {
   prompt(text: string): void
   cancel(): void
   answer(id: string, ok: boolean): void
+  createSession(workspace?: string): void
+  openSession(id: string): void
+  renameSession(id: string, title: string): void
+  deleteSession(id: string): void
+  browseWorkspace(path: string): void
+  selectModel(id: string): void
 }
 
 export const sessionsPlugin: Plugin = {
@@ -28,6 +34,13 @@ export const sessionsPlugin: Plugin = {
         store.resolveConfirm(id)
         ctx.connection.send({ type: 'interaction/answer', id, ok })
       },
+      createSession: workspace =>
+        ctx.connection.send(workspace ? { type: 'session/create', workspace } : { type: 'session/create' }),
+      openSession: id => ctx.connection.send({ type: 'session/open', id }),
+      renameSession: (id, title) => ctx.connection.send({ type: 'session/rename', id, title }),
+      deleteSession: id => ctx.connection.send({ type: 'session/delete', id }),
+      browseWorkspace: path => ctx.connection.send({ type: 'workspace/browse', path }),
+      selectModel: id => ctx.connection.send({ type: 'model/select', id }),
     }
 
     ctx.provide('sessions', sessions)

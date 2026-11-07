@@ -121,15 +121,22 @@ class Agent:
         return tuple(self._messages)
 
     def prompt(self, text: str) -> AsyncIterator[AgentEvent]:
-        """追加一条用户消息并启动一次运行。"""
-        self._ensure_idle()
-        self._messages.append(UserMessage(text))
-        return self._start()
+        """带着一条新提问启动一次运行。
 
-    def continue_(self) -> AsyncIterator[AgentEvent]:
-        """不追加用户消息，直接在现有历史上再跑一次。"""
+        提问不直接写进 `_messages`：它只进入本次运行的 transcript，并在终止事件的
+        `new_messages` 里回来。取消时因此天然不会留下没人回答的提问。
+        """
         self._ensure_idle()
-        return self._start()
+        return self._start(prompt=UserMessage(text))
+
+    def continue_(self, prompt: UserMessage | None = None) -> AsyncIterator[AgentEvent]:
+        """不追加用户消息，直接在现有历史上再跑一次。
+
+        `prompt` 供重试使用：上一轮如果一轮都没完成，提问还没进历史，
+        重试时把它带回来即可；已经答过的重试传 `None`，避免重复。
+        """
+        self._ensure_idle()
+        return self._start(prompt=prompt)
 
     def steer(self, text: str) -> None:
         """运行中插话；空闲时调用会抛 `RuntimeError`。"""
@@ -197,7 +204,7 @@ class Agent:
         if self._state != "idle":
             raise RuntimeError("agent is already running")
 
-    def _start(self) -> AsyncIterator[AgentEvent]:
+    def _start(self, prompt: UserMessage | None = None) -> AsyncIterator[AgentEvent]:
         self._state = "running"
         self._ended = False
         queue: asyncio.Queue[Any] = asyncio.Queue()
@@ -210,11 +217,14 @@ class Agent:
             get_steering_messages=self._steering.drain,
             get_follow_up_messages=self._follow_up.drain,
         )
-        self._task = asyncio.create_task(self._pump(queue, config))
+        self._task = asyncio.create_task(self._pump(queue, config, prompt))
         return self._consume(queue, self._task)
 
     async def _pump(
-        self, queue: asyncio.Queue[Any], config: LoopConfig
+        self,
+        queue: asyncio.Queue[Any],
+        config: LoopConfig,
+        prompt: UserMessage | None,
     ) -> None:
         """驱动 `run_loop`，转发事件，并把最终消息写入历史。"""
 
@@ -224,6 +234,7 @@ class Agent:
                 self._provider,
                 list(self._messages),
                 config,
+                prompt=prompt,
             ):
                 await queue.put(event)
 
@@ -234,8 +245,11 @@ class Agent:
                     self._messages.extend(event.new_messages)
                     turn_messages.clear()
         except asyncio.CancelledError:
-            # 取消时保留已经完成的轮次，丢弃当前半轮。
-            self._messages.extend(turn_messages)
+            if turn_messages:
+                # 取消时保留已经完成的轮次；提问由调用方补回最前面。
+                self._messages.extend(
+                    turn_messages if prompt is None else [prompt, *turn_messages]
+                )
             raise
         finally:
             self._ended = True

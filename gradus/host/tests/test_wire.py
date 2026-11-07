@@ -121,11 +121,14 @@ class WireTest(unittest.TestCase):
         ]
 
     def test_snapshot_shape(self) -> None:
+        spec = SimpleNamespace(provider="openai_compat", model="kimi")
         session = SimpleNamespace(
             messages=(UserMessage("hi"),),
             tools=(SimpleNamespace(spec=SimpleNamespace(name="bash")),),
             sandbox_backend="restricted",
             sandbox_warning="network NOT isolated",
+            workspace="/tmp/demo",
+            settings=SimpleNamespace(spec=spec, models=()),
         )
 
         payload = snapshot_payload(session)
@@ -133,6 +136,12 @@ class WireTest(unittest.TestCase):
         assert payload["protocolVersion"] == 1
         assert payload["messages"] == [{"id": "m-0", "role": "user", "text": "hi"}]
         assert payload["tools"] == ["bash"]
+        assert payload["workspace"] == "/tmp/demo"
+        assert payload["model"] == {
+            "name": "kimi · openai_compat",
+            "provider": "openai_compat",
+            "model": "kimi",
+        }
         assert payload["sandbox"] == {
             "backend": "restricted",
             "warning": "network NOT isolated",

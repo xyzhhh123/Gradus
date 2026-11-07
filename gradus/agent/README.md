@@ -118,7 +118,7 @@ async for event in run_loop(provider, messages, config):
         print(event.kind, event.message)
 ```
 
-`provider` is constructed by the upper layer. `messages` is not modified; new messages come from `AgentDone.new_messages`. The loop is an async generator, and persistence belongs to the upper layer.
+`provider` is constructed by the upper layer and `messages` is never modified. The `prompt` argument is only appended to this run's transcript; the terminal event's `new_messages` starts with that prompt (an empty list when nothing was produced), so `AgentDone.new_messages` is exactly the history added by this run. The loop is an async generator, and persistence belongs to the upper layer.
 
 ### Stateful `Agent`
 

@@ -1,24 +1,9 @@
 import type { Plugin } from '@deepseek-ai/cordis'
 import type { ToolCard } from '../model/state'
-
-function pathOf(args: unknown): string {
-  if (args && typeof args === 'object' && 'path' in args) {
-    const value = (args as { path?: unknown }).path
-    if (typeof value === 'string') return value
-  }
-  return ''
-}
+import { ToolCallCard } from '../render/tool-call-card'
 
 function FileCard({ card }: { card: ToolCard }) {
-  return (
-    <div className={`card card-${card.status}`}>
-      <div className="card-title">
-        {card.name}
-        <span className="card-meta">{pathOf(card.args)}</span>
-      </div>
-      <pre className="card-output">{card.content ?? card.partial ?? '…'}</pre>
-    </div>
-  )
+  return <ToolCallCard card={card} />
 }
 
 export const toolFsPlugin: Plugin = {

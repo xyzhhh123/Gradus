@@ -6,6 +6,8 @@
 - Host：`Gradus/gradus/host/`，只做协议、转发与安全，不改 `coding` 及以下任何一层
 - 参考：`deepseek-harness` 的 Web Client（下称 dsh）与它的 `vendor/cordis`
 
+问题记录见 [problem.md](problem.md)：只收**已验证解决**的项，未定与已知限制留在本文档。
+
 ## 0. 结论
 
 1. **前端独立成顶层目录 `Gradus/web/`**，不放进 `coding/`。它是另一个产品入口，语言与构建链都不同。
@@ -160,13 +162,15 @@ Cordis 来源：dsh 仓库的 `deepseek-harness/vendor/cordis`（`@deepseek-ai/c
 | `sessions` | `connection` | `sessions` | 事件 fold 成状态，提供订阅 |
 | `slots` | — | `slots` | 声明与注册表 |
 | `renderer` | `slots`, `sessions` | — | 唯一调用 `renderSlot('root')` 的地方 |
-| `layout` | `slots` | — | 声明 `app.root`、`shell.blocks`，注册 Shell |
+| `layout` | `slots` | — | 声明 `app.root`、`shell.blocks`、`app.overlay`，注册 Shell |
 | `conversation` | `slots`, `sessions` | — | 声明 `conversation.turn`、`tool.call.view`，贡献会话块 |
-| `composer` | `slots` | — | 输入框、发送、取消 |
+| `composer` | `slots` | — | 输入框、发送、取消、模型下拉 |
 | `approval` | `slots` | — | 确认弹窗 |
 | `tool-bash` | `slots` | — | bash 结果卡片 |
 | `tool-fs` | `slots` | — | 读写文件卡片 |
-| `status-bar` | `slots` | — | 沙箱警告、连接状态 |
+| `explorer` | `connection`, `slots` | — | 右侧文件树与多标签预览 |
+| `settings` | `connection`, `slots` | — | 设置面板：模型服务商候选表 |
+| `connection-mock` | — | `connection` | 用 `?mock` 替换真连接，只喂剧本帧 |
 
 只有 `renderer` 与 `conversation` 需要 `sessions`：前者要把快照转成 hook，后者要区分「历史消息」与「实时轮次」。其余视图只接收 props。
 
@@ -175,11 +179,13 @@ Cordis 来源：dsh 仓库的 `deepseek-harness/vendor/cordis`（`@deepseek-ai/c
 ```text
 connection ──> sessions ──> renderer
                     │
-                    └──────> conversation / composer / approval / status-bar
+                    └──────> conversation / composer / approval
 
 slots ────────────> layout ──> renderer
    │
-   └──> tool-bash / tool-fs / conversation
+   ├──> tool-bash / tool-fs / conversation
+   │
+   └──> explorer / settings（直接拿 connection 发帧）
 ```
 
 `tool-bash` 没有 `inject: ['sessions']`，因为它只画卡片，不读会话状态。这份清单本身就能说明"谁的改动会影响谁"。
@@ -287,11 +293,20 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 
 | type | 说明 |
 |---|---|
-| `session/snapshot` | 连接建立后的第一帧 |
+| `session/snapshot` | 连接建立或切换会话后的快照（含 `workspace`） |
+| `session/list` | 磁盘会话列表 `{ sessions, activeId }`，标题优先取头部 `title`，否则取首条提问 |
 | `session/message` | 服务端回显一条已入库的消息（用户输入），前端按 `id` 去重 |
 | `agent/event` | 一条 `AgentEvent` |
 | `interaction/confirm` | 需要确认，带 `id` |
 | `session/status` | `idle` / `running` / `error` |
+| `fs/entries` | 一次目录列表；空串表示工作区根 |
+| `fs/file` | 文件内容，带 `binary` / `truncated` |
+| `fs/error` | 路径越界或读取失败 |
+| `workspace/dirs` | 工作区选择对话框的一次目录列表 `{ path, parent, dirs }`；`path` 为空时是起点（盘符 / 主目录） |
+| `workspace/error` | 浏览目录失败（不存在等） |
+| `model/state` | `{ activeId, models, active }`：候选模型与当前选中项，连接后与切换成功后各发一次 |
+| `settings/state` | 设置页输入 `{ path, services, models, current }`；`models` 每项带 `hasKey`，不回显 key |
+| `settings/error` | 设置读取或保存失败，带 `message` |
 
 客户端发出：
 
@@ -299,7 +314,17 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 |---|---|
 | `session/prompt` | `{ text }` |
 | `session/cancel` | 取消当前运行 |
+| `session/create` | `{ workspace? }`，新开会话；不给工作区则沿用当前 |
+| `session/open` | `{ id }`，从会话文件恢复，工作区跟随文件头 |
+| `session/rename` | `{ id, title }`，改头部标题；空串恢复成取首条提问 |
+| `session/delete` | `{ id }`，删会话文件；删当前会话时先切到新会话 |
 | `interaction/answer` | `{ id, ok }` |
+| `fs/list` | `{ path }`，相对工作区 |
+| `fs/read` | `{ path }`，相对工作区，越界直接拒绝 |
+| `workspace/browse` | `{ path }`，列该目录的子目录；不受当前工作区限制 |
+| `model/select` | `{ id }`，切到 `model/state` 里的某个候选；生成中拒绝 |
+| `settings/get` | 拉设置页输入 |
+| `settings/save` | `{ models }`，整表写回配置文件的 `models`；生成中拒绝 |
 
 ### 5.3 AgentEvent 映射
 
@@ -345,6 +370,44 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 4. `sandbox_warning()` 非空时 UI 顶部常驻横幅。
 5. 确认弹窗只能由点击触达，禁止"全部同意"默认值。
 6. 不在前端暴露 API key、环境变量全量、`~/.gradus/trusted.json`。
+
+### 5.7 模型切换
+
+候选表来自配置文件的 `models` 数组（`coding/config.py` 的 `ModelChoice`），每项带自己的 `provider` / `base_url`，`api_key` 省略时沿用当前 key。环境变量只描述当前模型，装不下一张带多套凭证的表，所以候选表**只从文件读**。
+
+切换动作是 `Session.switch_model(settings)`：Provider 在构造期固定，换模型只能重建 `Agent`——用同一份 `messages` / 工具 / 系统提示再 `Agent.connect` 一次，然后关掉旧的。工具与系统提示不依赖模型，直接沿用。
+
+历史跨协议可用：`ai/types.py` 的 `Message` 是协议无关的中间表示，每个 provider 在发请求时各自翻译，所以同一会话可以在 `openai_compat` / `anthropic` / `openai_responses` 之间来回切。实测（kimi 三种端点、同一 key）：先让模型记住 41，切到 anthropic 与 responses 后仍能答出 41。不保证等价的地方：`ThinkingBlock` 在 chat / responses 形状里不回传，`signature` 原样透传而不转换，Anthropic 要求 messages 以 user 开头（历史本就交替，满足）。
+
+host 只在空闲时接受 `model/select`，成功后回 `model/state`；前端不自己推断选中项。
+
+**记住选择**：切换成功后把候选的显示名写进配置文件顶层 `active`（`save_active`）。启动或重读时 `with_active` 按名字把它切回 `spec`，所以重启、新开连接都停在同一个模型上；名字对不上（候选被删或改名）就保持顶层配置的模型，并在保存候选表时顺手清掉失效的 `active`。写 `active` 失败不影响本次切换，只是记不住。
+
+保存候选表（`settings/save`）不改变本连接正在用的模型：重读后按本连接记着的名字 `with_active` 切回去。
+
+### 5.8 字号
+
+不提供手动字号：唯一基准 `--content-font` 随视口宽度 `clamp(14px, 8.9px + 0.357vw, 18px)` 自动取值（1440px → 14px、1920px → 15.8px、2560px 起封顶 18px，窄屏不低于 14px），`--code-font` 与 `--fs-*` 全部由它 `calc` 派生，`--content-width` 按 `53.4 × --content-font` 同比缩放，所以窗口放大时对话列同步变宽而不是只剩两行。
+
+这与 dsh 的做法一致：**px 基准 + 每角色字号变量**，不做 rem 等比体系，也不做整页 `zoom`。面板宽度（侧栏 264–420、右栏 300–70%）仍是 px，拖拽手感不受字号影响。
+
+### 5.9 设置页
+
+顶栏齿轮打开设置面板（`plugins/settings.tsx`，挂 `shell.head-actions` 与 `app.overlay`），三段内容：外观（主题、字号）、模型服务商候选表、配置文件路径。
+
+- 读：`settings/get` → `settings/state`，候选表带 `hasKey` 布尔，**不回显 key**；`services` 是 `ai/services.py` 的 `SERVICES`，供填写时挑快捷名。
+- 写：`settings/save` → `save_models`，整表替换 `models`，其它顶层字段原样保留；`api_key` 留空沿用原文件同位置的值。写入走「临时文件 + 校验 + `os.replace`」，坏数据不覆盖原文件。
+- 保存成功后 host 重读配置再广播 `settings/state` 与 `model/state`，面板 600ms 后自动收起；失败留在原地显示 `settings/error`。
+
+### 5.10 主题
+
+与 dsh 同构：`:root` 写浅色语义 token，`:root[data-theme='dark']` 只覆盖颜色与阴影，字号/尺寸变量两边共用。dsh 也是这么做的——它的 `design-platform.css` 里 `body {...}` 就是浅色，深色靠 `body[data-ds-dark-theme]` 覆盖，`THEME_PREFERENCES` 为 `light / dark / system`，默认 `system`。
+
+- 偏好三态：`light` / `dark` / `system`，存在 `localStorage['gradus.theme']`，逻辑在 `src/model/theme.ts`。**纯前端状态，不经 host**——换主题与会话、配置无关，没必要往返一次。
+- 应用方式：把解析结果写到 `<html data-theme>`；`system` 时订阅 `matchMedia('(prefers-color-scheme: dark)')`，系统切换跟着变，已明确选浅/深则不理会。
+- 防闪烁：`index.html` 里一段内联脚本在样式生效前先设好 `data-theme`，与 `theme.ts` 共用同一个存储键（改一处要改两处）。
+- 设置页「外观」段用三个按钮切换（`ThemeRow`），选中态跟随「已保存的偏好」而非解析后的颜色，避免选了「跟随系统」却被高亮成当前实际的浅/深。
+- 代码高亮六条（`--hl-*`）随主题走：浅色近 github light，深色近 github dark。
 
 ## 6. 传输与重连
 

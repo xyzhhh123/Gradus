@@ -4,12 +4,13 @@ import { approvalPlugin } from './plugins/approval'
 import { composerPlugin } from './plugins/composer'
 import { connectionPlugin } from './plugins/connection'
 import { conversationPlugin } from './plugins/conversation'
+import { explorerPlugin } from './plugins/explorer'
 import { layoutPlugin } from './plugins/layout'
 import { mockConnectionPlugin } from './plugins/mock-connection'
 import { rendererPlugin } from './plugins/renderer'
 import { sessionsPlugin } from './plugins/sessions'
+import { settingsPlugin } from './plugins/settings'
 import { slotsPlugin } from './plugins/slots'
-import { statusBarPlugin } from './plugins/status-bar'
 import { toolBashPlugin } from './plugins/tool-bash'
 import { toolFsPlugin } from './plugins/tool-fs'
 
@@ -27,9 +28,10 @@ const plugins: Plugin[] = [
   conversationPlugin,
   composerPlugin,
   approvalPlugin,
-  statusBarPlugin,
   toolBashPlugin,
   toolFsPlugin,
+  explorerPlugin,
+  settingsPlugin,
   rendererPlugin,
 ]
 

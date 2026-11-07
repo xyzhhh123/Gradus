@@ -146,6 +146,34 @@ class SessionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(one.system, "custom")
         await one.aclose()
 
+    async def test_switch_model_rebuilds_agent(self):
+        one = await session.Session.connect(_settings())
+        try:
+            target = Settings(
+                spec=ModelSpec(
+                    provider="openai_compat",
+                    model="kimi-test",
+                    base_url="https://api.moonshot.cn/v1",
+                    context_window=128_000,
+                    max_output_tokens=4_096,
+                ),
+                api_key="sk-other",
+            )
+            await one.switch_model(target)
+
+            self.assertEqual(one.settings.spec.provider, "openai_compat")
+            self.assertEqual(one.settings.spec.model, "kimi-test")
+            self.assertEqual(one.messages, ())
+        finally:
+            await one.aclose()
+
+    async def test_switch_model_rejects_closed_session(self):
+        one = await session.Session.connect(_settings())
+        await one.aclose()
+
+        with self.assertRaises(RuntimeError):
+            await one.switch_model(_settings())
+
 
 class SessionFileTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:

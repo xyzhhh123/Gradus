@@ -62,6 +62,8 @@ ai/       Provider、内部协议
 
 `${NAME}` 会替换成同名环境变量。未知字段、JSON 格式错误、引用了未设置的变量都会报错；默认文件不存在只是表示“没有配置文件”。
 
+文件里还可以带一个 `models` 数组，供 Web 的模型选择器使用：每项接受与顶层相同的连接字段，外加可选的显示名 `name`。顶层 `active` 记住界面上最后一次选中的名字，下次启动自动切回去；名字对不上时仍用顶层配置的模型。环境变量只描述当前模型。
+
 CLI 启动时还会读 `<workspace>/.env`：文件里的值优先，会覆盖同名环境变量；空值视为未配置。解析在 `gradus/ai/envfile.py`，与 `ai/scripts/record.py` 共用。`.env` 按「一套连接」组织，把 `GRADUS_SERVICE`（带出协议与 `base_url`）、`GRADUS_MODEL`、`GRADUS_API_KEY` 写在一起，需要自定义端点时再加 `GRADUS_BASE_URL`；单靠 key 认不出服务商，所以端点和 key 必须成对出现，换服务商就整段替换。
 
 项目被记进 MCP 信任记录后，可用 `gradus --untrust [路径]` 撤销（省略路径时用当前 workspace），执行完直接退出。

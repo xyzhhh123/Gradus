@@ -106,6 +106,16 @@ def history_payload(messages: tuple[Message, ...]) -> list[dict[str, Any]]:
     return payloads
 
 
+def model_summary(settings: Any) -> dict[str, str]:
+    """当前模型的展示信息；`settings` 是 `coding.config.Settings`。"""
+    spec = settings.spec
+    name = next(
+        (choice.name for choice in settings.models if choice.spec == spec),
+        f"{spec.model} · {spec.provider}",
+    )
+    return {"name": name, "provider": spec.provider, "model": spec.model}
+
+
 def snapshot_payload(session: Any) -> dict[str, Any]:
     """连接建立后的第一帧。`session` 是 `gradus.coding.session.Session`。"""
     return {
@@ -114,6 +124,8 @@ def snapshot_payload(session: Any) -> dict[str, Any]:
         "messages": history_payload(session.messages),
         "status": "idle",
         "tools": [tool.spec.name for tool in session.tools],
+        "workspace": str(session.workspace),
+        "model": model_summary(session.settings),
         "sandbox": {
             "backend": session.sandbox_backend,
             "warning": session.sandbox_warning,

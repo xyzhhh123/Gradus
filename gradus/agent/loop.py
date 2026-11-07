@@ -29,6 +29,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import suppress
+from dataclasses import replace
 from typing import Any
 
 from ..ai.base import Provider, Request
@@ -41,6 +42,7 @@ from ..ai.types import (
     ToolCallBlock,
     ToolResultMessage,
     Usage,
+    UserMessage,
 )
 from .base import AgentTool, LoopConfig
 from .hooks import (
@@ -483,22 +485,41 @@ async def _run_loop_events(
         turn += 1
 
 
+def _with_prompt(prompt: UserMessage | None, messages: list[Message]) -> list[Message]:
+    """把本次提问补在「本轮新增」的最前面。
+
+    一条产出都没有（首轮就被取消 / 直接失败）时返回空表：这种情况视为没说过，
+    否则历史里会留下一条没有回答的问题，下一轮请求会把它当成待办。
+    """
+    if prompt is None:
+        return messages
+    if not messages:
+        return []
+    return [prompt, *messages]
+
+
 async def run_loop(
     provider: Provider,
     messages: list[Message],
     config: LoopConfig,
+    prompt: UserMessage | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """驱动一次运行，逐条产出 agent 事件。
+
+    `prompt` 是本次新增的提问：它只拼进发给模型的 transcript，不写进 `messages`；
+    终止事件的 `new_messages` 会把它补在最前，于是调用方只需 `extend` 一次，
+    既不会漏掉提问，也不会重复。
 
     在核心循环外包一层，把取消编码成 `AgentError(kind="aborted")`：
     每次运行都有且只有一个终止事件；发完事件后继续抛 `CancelledError`。
     """
+    transcript = messages if prompt is None else [*messages, prompt]
     committed: list[Message] = []
     usage = Usage()
     partial: AssistantMessage | None = None
 
     try:
-        async for event in _run_loop_events(provider, messages, config):
+        async for event in _run_loop_events(provider, transcript, config):
             if isinstance(event, TurnStart):
                 partial = None
             elif isinstance(event, TurnEnd):
@@ -514,13 +535,18 @@ async def run_loop(
             if isinstance(candidate, AssistantMessage):
                 partial = candidate
 
-            yield event
+            if isinstance(event, (AgentDone, AgentError)):
+                yield replace(
+                    event, new_messages=_with_prompt(prompt, event.new_messages)
+                )
+            else:
+                yield event
     except asyncio.CancelledError:
         yield AgentError(
             kind="aborted",
             message="run was cancelled",
             partial=partial,
-            new_messages=list(committed),
+            new_messages=_with_prompt(prompt, list(committed)),
             usage=usage,
         )
         raise

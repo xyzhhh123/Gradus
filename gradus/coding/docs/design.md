@@ -32,6 +32,8 @@ cli
 
 配置来源与优先级：`overrides`（CLI 参数）> `env`（注入的环境变量）> `os.environ` > 配置文件。配置文件默认 `~/.gradus/config.json`（用户级，避免把 key 提交进仓库），可用 `--config` 指定；字段为 `service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`，未知字段直接报错。字符串里的 `${NAME}` 展开成同名环境变量，未设置时报错，便于文件里只写 `${ANTHROPIC_API_KEY}`。默认文件不存在视为没有配置；`--config` 指向的文件不存在则报错。
 
+文件另有两个只有文件才有的顶层键：`models` 是候选模型数组（每项字段与顶层相同、少了 `sandbox*`，可带显示名 `name`），供 Web 模型选择器使用；`active` 是上次在界面上选中的候选名，启动与重读时由 `with_active` 切回对应的 `spec`，名字对不上就保持顶层配置的模型。环境变量是一维的，装不下这张带多套凭证的表，所以候选与记忆都只从文件读。
+
 `service` 是内置服务商快捷名（表在 `gradus/ai/services.py`，与 `ai/scripts/record.py` 共用）：写 `"service": "deepseek"` 就带出 `provider` 与 `base_url`，不必手填。显式写的 `provider` / `base_url` 仍然生效——`base_url` 覆盖表里的地址，`provider` 与 `service` 的协议不一致时报错；服务商名未知时报错并列出可选值。
 
 CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE` / `export` / `#` 注释 / 值两侧引号；**文件优先**，同名环境变量会被文件里的值覆盖；空值视为未配置，跳过），再按上面的优先级取值。解析在 `gradus/ai/envfile.py`（`ai/scripts/record.py` 也要用，依赖方向只允许放在 `ai` 侧），与 `ai/scripts/record.py` 共用同一份规则。

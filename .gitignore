@@ -14,6 +14,9 @@ build/
 .env.*
 !.env.example
 
+# 运行时产物：会话文件落在 <workspace>/.gradus/sessions/
+.gradus/
+
 # 编辑器 / 系统
 .idea/
 .vscode/

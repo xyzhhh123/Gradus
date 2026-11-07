@@ -1,17 +1,9 @@
 import type { Plugin } from '@deepseek-ai/cordis'
 import type { ToolCard } from '../model/state'
+import { ToolCallCard } from '../render/tool-call-card'
 
 function BashCard({ card }: { card: ToolCard }) {
-  const output = card.content ?? card.partial
-  return (
-    <div className={`card card-${card.status}`}>
-      <div className="card-title">
-        bash
-        {card.durationMs !== undefined && <span className="card-meta">{card.durationMs}ms</span>}
-      </div>
-      <pre className="card-output">{output || '…'}</pre>
-    </div>
-  )
+  return <ToolCallCard card={card} />
 }
 
 export const toolBashPlugin: Plugin = {

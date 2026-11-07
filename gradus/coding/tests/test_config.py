@@ -17,6 +17,10 @@ from gradus.coding.config import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     ConfigError,
     load,
+    save_active,
+    save_models,
+    with_active,
+    with_choice,
 )
 
 FULL_ENV = {
@@ -364,6 +368,229 @@ class ConfigFileTest(unittest.TestCase):
 
         with self.assertRaises(ConfigError):
             load(config=path)
+
+    def test_models_array_is_parsed(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "api_key": "sk-file",
+                "models": [
+                    {"name": "Kimi Chat", "service": "kimi-compat", "model": "kimi-k2.7-code"},
+                    {
+                        "service": "kimi-anthropic",
+                        "model": "kimi-k2.7-code",
+                        "api_key": "${OTHER_KEY}",
+                    },
+                ],
+            }
+        )
+
+        with patch.dict("os.environ", {"OTHER_KEY": "sk-other"}, clear=True):
+            settings = load(config=path)
+
+        self.assertEqual(len(settings.models), 2)
+        chat, messages = settings.models
+        self.assertEqual(chat.name, "Kimi Chat")
+        self.assertEqual(chat.spec.provider, "openai_compat")
+        self.assertIsNone(chat.api_key)
+        # 没写 name 时用「模型 · 协议」兜底
+        self.assertEqual(messages.name, "kimi-k2.7-code · anthropic")
+        self.assertEqual(messages.spec.base_url, "https://api.moonshot.cn/anthropic")
+        self.assertEqual(messages.api_key, "sk-other")
+
+    def test_with_choice_keeps_current_key_when_choice_has_none(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "api_key": "sk-file",
+                "models": [{"service": "kimi-anthropic", "model": "kimi-k2.7-code"}],
+            }
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            settings = load(config=path)
+        switched = with_choice(settings, settings.models[0])
+
+        self.assertEqual(switched.spec.provider, "anthropic")
+        self.assertEqual(switched.api_key, "sk-file")
+        # 原对象不可变，切完还能切回去
+        self.assertEqual(settings.spec.provider, "openai_compat")
+
+    def test_models_entry_needs_resolvable_endpoint(self):
+        path = self._write(
+            {"service": "kimi-compat", "model": "m", "models": [{"model": "x"}]}
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(ConfigError) as ctx:
+                load(config=path)
+
+        self.assertIn("models[0]", str(ctx.exception))
+
+    def test_models_unknown_field_errors(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "m",
+                "models": [{"service": "kimi-compat", "model": "x", "temperature": 1}],
+            }
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(ConfigError) as ctx:
+                load(config=path)
+
+        self.assertIn("temperature", str(ctx.exception))
+
+    def test_save_models_preserves_other_fields_and_keys(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "api_key": "sk-global",
+                "models": [
+                    {
+                        "name": "old",
+                        "service": "kimi-compat",
+                        "model": "kimi-k2.7-code",
+                        "api_key": "sk-old",
+                    }
+                ],
+            }
+        )
+
+        save_models(
+            path,
+            [
+                # 空 key 表示沿用原文件同位置的值
+                {"name": "改名后", "service": "kimi-compat", "model": "kimi-k2.7-code"},
+                {"name": "DeepSeek", "service": "deepseek", "model": "deepseek-chat"},
+            ],
+        )
+
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["service"], "kimi-compat")
+        self.assertEqual(payload["api_key"], "sk-global")
+        self.assertEqual(payload["models"][0]["name"], "改名后")
+        self.assertEqual(payload["models"][0]["api_key"], "sk-old")
+        self.assertNotIn("api_key", payload["models"][1])
+
+        with patch.dict("os.environ", {}, clear=True):
+            settings = load(config=path)
+
+        self.assertEqual(len(settings.models), 2)
+        self.assertEqual(
+            [choice.spec.provider for choice in settings.models],
+            ["openai_compat", "openai_compat"],
+        )
+        self.assertEqual(settings.models[1].api_key, None)
+
+    def test_save_models_keeps_file_when_entry_is_invalid(self):
+        path = self._write({"service": "kimi-compat", "model": "m", "models": []})
+        before = path.read_text(encoding="utf-8")
+
+        with self.assertRaises(ConfigError):
+            save_models(path, [{"name": "坏行", "model": "x"}])
+
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+        self.assertFalse(path.with_name(path.name + ".tmp").exists())
+
+    def test_active_choice_is_applied_on_load(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "api_key": "sk-file",
+                "models": [
+                    {"name": "Kimi Chat", "service": "kimi-compat", "model": "kimi-k2.7-code"},
+                    {"name": "Alt", "service": "kimi-anthropic", "model": "kimi-k2.7-code"},
+                ],
+                "active": "Alt",
+            }
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            settings = with_active(load(config=path))
+
+        self.assertEqual(settings.active, "Alt")
+        self.assertEqual(settings.spec.provider, "anthropic")
+
+    def test_active_name_gone_keeps_top_level_model(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "models": [{"name": "Alt", "service": "kimi-anthropic", "model": "m"}],
+                "active": "被删掉的名字",
+            }
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            settings = with_active(load(config=path))
+
+        self.assertEqual(settings.spec.provider, "openai_compat")
+
+    def test_with_choice_records_active_name(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "models": [{"name": "Alt", "service": "kimi-anthropic", "model": "m"}],
+            }
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            settings = load(config=path)
+
+        self.assertEqual(with_choice(settings, settings.models[0]).active, "Alt")
+
+    def test_save_active_round_trips_and_clears(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "models": [{"name": "Alt", "service": "kimi-compat", "model": "m"}],
+            }
+        )
+
+        save_active(path, "Alt")
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(load(config=path).active, "Alt")
+
+        save_active(path, None)
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertIsNone(load(config=path).active)
+        # 其它字段原样保留
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["model"], "kimi-k2.7-code")
+
+    def test_save_models_drops_stale_active(self):
+        path = self._write(
+            {
+                "service": "kimi-compat",
+                "model": "kimi-k2.7-code",
+                "models": [{"name": "Alt", "service": "kimi-compat", "model": "m"}],
+                "active": "Alt",
+            }
+        )
+
+        save_models(path, [{"name": "别的", "service": "kimi-compat", "model": "m2"}])
+
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertNotIn("active", payload)
+        # 新加的候选不是被删掉的旧选择，不该被当成 active
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertIsNone(load(config=path).active)
+
+    def test_active_must_be_string(self):
+        path = self._write({"service": "kimi-compat", "model": "m", "active": 1})
+
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(ConfigError) as ctx:
+                load(config=path)
+
+        self.assertIn("active", str(ctx.exception))
 
 
 class ServiceTest(unittest.TestCase):

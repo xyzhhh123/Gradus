@@ -20,9 +20,10 @@ class MockConnection implements ConnectionApi {
       this.emit('session/snapshot', {
         protocolVersion: 1,
         capabilities: ['mock'],
-        messages: [{ id: 'm0', role: 'assistant', text: '这是 mock 连接，不连后端。' }],
+        messages: [],
         status: 'idle',
         tools: ['bash', 'read_file', 'write_file'],
+        workspace: 'C:\\demo\\gradus',
         sandbox: { backend: 'restricted', warning: 'network NOT isolated' },
       })
     })
@@ -70,7 +71,10 @@ class MockConnection implements ConnectionApi {
     this.at(0, () => this.emit('agent/event', { type: 'agent/start' }))
     this.at(80, () => this.emit('agent/event', { type: 'turn/start', turn: 0 }))
     this.at(200, () =>
-      this.emit('agent/event', { type: 'assistant/delta', text: `收到：${text}\n我先看一下目录。` }),
+      this.emit('agent/event', {
+        type: 'assistant/delta',
+        text: `收到：${text}\n\n我先看一下目录：\n\n- 工作区是标准结构\n- 共 3 个入口\n\n\`\`\`bash\nls -la\n\`\`\`\n`,
+      }),
     )
     this.at(500, () =>
       this.emit('agent/event', {
