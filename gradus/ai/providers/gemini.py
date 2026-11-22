@@ -92,12 +92,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 import httpx
 
-from ..base import THINKING_BUDGETS, ModelSpec, Request, ToolSpec
+from ..base import expand_headers, THINKING_BUDGETS, ModelSpec, Request, ToolSpec
 from ..stream_assembler import StreamAssembler
 from ..transport import TransportFailure, post_sse
 from ..types import (
@@ -236,9 +236,12 @@ class GeminiProvider:
         spec: ModelSpec,
         api_key: str = "",
         client: httpx.AsyncClient | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         self.spec = spec
         self.api_key = api_key
+        # 配置里的自定义请求头；`{run}` 在这里展开成实例级随机 id
+        self._extra_headers = expand_headers(headers)
         # 注入的 client 由调用方关闭；None 时 post_sse 每次自建并 aclose（D29）
         self._client = client
 
@@ -252,81 +255,85 @@ class GeminiProvider:
         tool_count = 0
 
         try:
-            async for event in post_sse(
+            events = post_sse(
                 self._url(),
                 headers=self._headers(),
                 payload=build_payload(request, self.spec),
                 client=self._client,
-            ):
-                if isinstance(event, TransportFailure):
-                    for _event in assembler.fail("error", event.message):
-                        yield _event
-                    return
-
-                chunk = json.loads(event.data)
-
-                if feedback := chunk.get("promptFeedback"):
-                    if feedback.get("blockReason"):
-                        # 整条请求被拒，没有任何候选；这不是失败，是"没给出答案"
-                        for _event in assembler.done("filtered"):
+            )
+            try:
+                async for event in events:
+                    if isinstance(event, TransportFailure):
+                        for _event in assembler.fail("error", event.message):
                             yield _event
                         return
 
-                if usage := chunk.get("usageMetadata"):
-                    assembler.add_usage(parse_usage(usage))
+                    chunk = json.loads(event.data)
 
-                for candidate in chunk.get("candidates") or []:
-                    # 只认第一条候选。我们不发 candidateCount，默认就是 1；
-                    # 万一上游返回多条，混进同一条消息会串味。
-                    if candidate.get("index", 0) != 0:
-                        continue
-
-                    content = candidate.get("content") or {}
-
-                    for part in content.get("parts") or []:
-                        if part.get("thought"):
-                            if sig := part.get("thoughtSignature"):
-                                signature = sig
-                            if text := part.get("text"):
-                                for _event in assembler.thinking(text):
-                                    yield _event
-
-                        elif "text" in part:
-                            # 文本开始，思考块要先收尾（end_thinking 幂等）
-                            for _event in assembler.end_thinking(signature or None):
-                                yield _event
-                            signature = ""
-                            if part["text"]:
-                                for _event in assembler.text(part["text"]):
-                                    yield _event
-
-                        elif "functionCall" in part:
-                            for _event in assembler.end_thinking(signature or None):
-                                yield _event
-                            signature = ""
-                            call = part["functionCall"]
-                            # 本厂商没有 call id，自己合成一个
-                            for _event in assembler.start_tool(f"call_{tool_count}", call["name"]):
-                                yield _event
-                            tool_count += 1
-                            saw_tool = True
-                            arguments = call.get("args") or {}
-                            for _event in assembler.tool_arguments(
-                                json.dumps(arguments, ensure_ascii=False)
-                            ):
-                                yield _event
-                            for _event in assembler.end_tool():
-                                yield _event
-
-                    if reason := candidate.get("finishReason"):
-                        if reason == "MALFORMED_FUNCTION_CALL":
-                            for _event in assembler.fail(
-                                "error", "gemini: MALFORMED_FUNCTION_CALL"
-                            ):
+                    if feedback := chunk.get("promptFeedback"):
+                        if feedback.get("blockReason"):
+                            # 整条请求被拒，没有任何候选；这不是失败，是"没给出答案"
+                            for _event in assembler.done("filtered"):
                                 yield _event
                             return
-                        stop_reason = STOP_REASONS.get(reason, "stop")
 
+                    if usage := chunk.get("usageMetadata"):
+                        assembler.add_usage(parse_usage(usage))
+
+                    for candidate in chunk.get("candidates") or []:
+                        # 只认第一条候选。我们不发 candidateCount，默认就是 1；
+                        # 万一上游返回多条，混进同一条消息会串味。
+                        if candidate.get("index", 0) != 0:
+                            continue
+
+                        content = candidate.get("content") or {}
+
+                        for part in content.get("parts") or []:
+                            if part.get("thought"):
+                                if sig := part.get("thoughtSignature"):
+                                    signature = sig
+                                if text := part.get("text"):
+                                    for _event in assembler.thinking(text):
+                                        yield _event
+
+                            elif "text" in part:
+                                # 文本开始，思考块要先收尾（end_thinking 幂等）
+                                for _event in assembler.end_thinking(signature or None):
+                                    yield _event
+                                signature = ""
+                                if part["text"]:
+                                    for _event in assembler.text(part["text"]):
+                                        yield _event
+
+                            elif "functionCall" in part:
+                                for _event in assembler.end_thinking(signature or None):
+                                    yield _event
+                                signature = ""
+                                call = part["functionCall"]
+                                # 本厂商没有 call id，自己合成一个
+                                for _event in assembler.start_tool(f"call_{tool_count}", call["name"]):
+                                    yield _event
+                                tool_count += 1
+                                saw_tool = True
+                                arguments = call.get("args") or {}
+                                for _event in assembler.tool_arguments(
+                                    json.dumps(arguments, ensure_ascii=False)
+                                ):
+                                    yield _event
+                                for _event in assembler.end_tool():
+                                    yield _event
+
+                        if reason := candidate.get("finishReason"):
+                            if reason == "MALFORMED_FUNCTION_CALL":
+                                for _event in assembler.fail(
+                                    "error", "gemini: MALFORMED_FUNCTION_CALL"
+                                ):
+                                    yield _event
+                                return
+                            stop_reason = STOP_REASONS.get(reason, "stop")
+
+            finally:
+                await events.aclose()
             # 本厂商对纯工具调用不给专门的 finishReason，靠内容判定
             if saw_tool and stop_reason == "stop":
                 stop_reason = "tool_use"
@@ -353,4 +360,5 @@ class GeminiProvider:
         }
         if self.api_key:
             headers["x-goog-api-key"] = self.api_key
+        headers.update(self._extra_headers)
         return headers

@@ -25,3 +25,7 @@ Thumbs.db
 
 # 日志
 *.log
+
+# 评测产物（轨迹、补丁、容器日志）
+bench/runs/
+bench/build-context/

@@ -18,6 +18,7 @@ from gradus.coding.config import (
     ConfigError,
     load,
     save_active,
+    save_keep_preset,
     save_models,
     with_active,
     with_choice,
@@ -29,6 +30,462 @@ FULL_ENV = {
     "GRADUS_BASE_URL": "https://api.deepseek.com/v1",
     "GRADUS_API_KEY": "sk-test",
 }
+
+
+class ContextBudgetConfigTest(unittest.TestCase):
+    """上下文预算的两个可调项：不填走推导，填了要校验。"""
+
+    def test_defaults_to_derivation(self):
+        settings = load(env=FULL_ENV)
+
+        self.assertIsNone(settings.context_reserve_tokens)
+        self.assertIsNone(settings.context_keep_tokens)
+
+    def test_reads_overrides(self):
+        settings = load(
+            env=dict(
+                FULL_ENV,
+                GRADUS_CONTEXT_RESERVE="8192",
+                GRADUS_CONTEXT_KEEP="40000",
+            )
+        )
+
+        self.assertEqual(settings.context_reserve_tokens, 8_192)
+        self.assertEqual(settings.context_keep_tokens, 40_000)
+
+    def test_rejects_non_positive_override(self):
+        for name in ("GRADUS_CONTEXT_RESERVE", "GRADUS_CONTEXT_KEEP"):
+            with self.subTest(name=name):
+                with self.assertRaises(ConfigError):
+                    load(env=dict(FULL_ENV, **{name: "0"}))
+
+
+class RequestHeadersConfigTest(unittest.TestCase):
+    """自定义请求头：文件里是对象，环境里是 `k=v;k=v`，后者按名字覆盖前者。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "config.json"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _write(self, payload) -> Path:
+        self.path.write_text(json.dumps(payload), encoding="utf-8")
+        return self.path
+
+    def test_defaults_to_empty(self):
+        self.assertEqual(load(env=FULL_ENV).headers, {})
+
+    def test_reads_object_from_file(self):
+        path = self._write(
+            {
+                "service": "opencode-go",
+                "model": "deepseek-v4.1-flash",
+                "api_key": "sk-test",
+                "headers": {"x-opencode-session": "{run}"},
+            }
+        )
+
+        settings = load(config=path)
+
+        self.assertEqual(settings.headers, {"x-opencode-session": "{run}"})
+        self.assertEqual(settings.spec.provider, "openai_compat")
+        self.assertEqual(
+            settings.spec.base_url, "https://opencode.ai/inference/go/v1"
+        )
+
+    def test_env_header_overrides_file_by_name(self):
+        path = self._write(
+            {
+                "service": "opencode-go",
+                "model": "deepseek-v4.1-flash",
+                "api_key": "sk-test",
+                "headers": {"x-opencode-session": "from-file", "x-org": "file-org"},
+            }
+        )
+
+        settings = load(
+            env=dict(FULL_ENV, GRADUS_HEADERS="x-opencode-session=from-env"),
+            config=path,
+        )
+
+        self.assertEqual(settings.headers["x-opencode-session"], "from-env")
+        self.assertEqual(settings.headers["x-org"], "file-org")
+
+    def test_env_headers_parsed_from_string(self):
+        settings = load(env=dict(FULL_ENV, GRADUS_HEADERS="a=1; b=2 ;"))
+
+        self.assertEqual(settings.headers, {"a": "1", "b": "2"})
+
+    def test_rejects_bad_env_syntax(self):
+        with self.assertRaises(ConfigError):
+            load(env=dict(FULL_ENV, GRADUS_HEADERS="not-a-pair"))
+
+    def test_rejects_non_object_headers(self):
+        path = self._write(
+            {
+                "service": "opencode-go",
+                "model": "m",
+                "api_key": "k",
+                "headers": ["x-opencode-session=1"],
+            }
+        )
+
+        with self.assertRaises(ConfigError):
+            load(config=path)
+
+    def test_rejects_non_string_header_value(self):
+        path = self._write(
+            {
+                "service": "opencode-go",
+                "model": "m",
+                "api_key": "k",
+                "headers": {"x-org": 1},
+            }
+        )
+
+        with self.assertRaises(ConfigError):
+            load(config=path)
+
+    def test_save_models_keeps_headers(self):
+        path = self._write(
+            {
+                "service": "opencode-go",
+                "model": "deepseek-v4.1-flash",
+                "api_key": "sk-test",
+                "headers": {"x-opencode-session": "{run}"},
+            }
+        )
+
+        save_models(path, [{"name": "Go", "service": "opencode-go", "model": "m"}])
+
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["headers"], {"x-opencode-session": "{run}"})
+        # 写完还能再读回来
+        self.assertEqual(load(config=path).headers["x-opencode-session"], "{run}")
+
+
+class ModelCapabilityTest(unittest.TestCase):
+    """窗口按模型能力给；输出上限仍取保守值；显式值只能往下压。"""
+
+    MODEL = "deepseek-v4.1-flash"
+    ENV = {
+        "GRADUS_SERVICE": "opencode-go",
+        "GRADUS_MODEL": MODEL,
+        "GRADUS_API_KEY": "sk-test",
+    }
+
+    def test_window_comes_from_the_capability_table(self):
+        settings = load(env=dict(self.ENV))
+
+        self.assertEqual(settings.spec.context_window, 1_000_000)
+        self.assertEqual(settings.spec.window_limit, 1_000_000)
+
+    def test_output_stays_conservative_but_records_the_limit(self):
+        settings = load(env=dict(self.ENV))
+
+        # `max_output_tokens` 会原样进请求：能力 384k 不代表每次都要 384k。
+        self.assertEqual(settings.spec.max_output_tokens, DEFAULT_MAX_OUTPUT_TOKENS)
+        self.assertEqual(settings.spec.output_limit, 384_000)
+
+    def test_explicit_window_is_kept_when_below_the_limit(self):
+        settings = load(env=dict(self.ENV, GRADUS_CONTEXT_WINDOW="200000"))
+
+        self.assertEqual(settings.spec.context_window, 200_000)
+        self.assertEqual(settings.spec.window_limit, 1_000_000)
+
+    def test_explicit_window_above_the_limit_is_capped(self):
+        settings = load(env=dict(self.ENV, GRADUS_CONTEXT_WINDOW="2000000"))
+
+        self.assertEqual(settings.spec.context_window, 1_000_000)
+
+    def test_unknown_model_falls_back_to_the_default_window(self):
+        settings = load(env=dict(self.ENV, GRADUS_MODEL="nobody-verified-this"))
+
+        self.assertEqual(settings.spec.context_window, DEFAULT_CONTEXT_WINDOW)
+        self.assertIsNone(settings.spec.window_limit)
+
+    def test_explicit_output_above_the_limit_is_capped(self):
+        settings = load(env=dict(self.ENV, GRADUS_MAX_OUTPUT_TOKENS="999999"))
+
+        self.assertEqual(settings.spec.max_output_tokens, 384_000)
+
+    def test_keep_preset_defaults_and_validates(self):
+        self.assertEqual(load(env=dict(self.ENV)).keep_preset, "balanced")
+        self.assertEqual(
+            load(env=dict(self.ENV, GRADUS_KEEP_PRESET="aggressive")).keep_preset,
+            "aggressive",
+        )
+        with self.assertRaises(ConfigError):
+            load(env=dict(self.ENV, GRADUS_KEEP_PRESET="whatever"))
+
+    def test_probe_limits_is_off_by_default(self):
+        self.assertFalse(load(env=dict(self.ENV)).probe_limits)
+        self.assertTrue(load(env=dict(self.ENV, GRADUS_PROBE_LIMITS="1")).probe_limits)
+
+    def _activate(self, entry: dict) -> object:
+        path = Path(tempfile.mkdtemp()) / "config.json"
+        path.write_text(
+            json.dumps({"models": [entry], "active": entry["name"]}),
+            encoding="utf-8",
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            settings = load(
+                env=dict(self.ENV, GRADUS_CONTEXT_WINDOW="200000"), config=path
+            )
+            return with_active(settings)
+
+    def test_model_entry_without_window_keeps_the_session_window(self):
+        """切模型不该把用户显式配的窗口悄悄改回默认值。"""
+        merged = self._activate(
+            {"name": "entry", "service": "kimi-compat", "model": "kimi-k3"}
+        )
+
+        self.assertEqual(merged.spec.model, "kimi-k3")
+        self.assertEqual(merged.spec.context_window, 200_000)
+
+    def test_model_entry_with_its_own_window_wins(self):
+        merged = self._activate(
+            {
+                "name": "entry",
+                "service": "kimi-compat",
+                "model": "kimi-k3",
+                "context_window": 32_000,
+            }
+        )
+
+        self.assertEqual(merged.spec.context_window, 32_000)
+
+
+class KeepPresetSaveTest(unittest.TestCase):
+    """界面改保留量预设：写回顶层，默认值就不写，其它字段原样保留。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "config.json"
+        self.path.write_text(
+            json.dumps(
+                {
+                    "service": "kimi-compat",
+                    "model": "kimi-k3",
+                    "api_key": "sk-test",
+                    "models": [{"name": "kimi", "service": "kimi-compat", "model": "kimi-k3"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_writes_the_preset(self):
+        save_keep_preset(self.path, "aggressive")
+
+        payload = json.loads(self.path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["keep_preset"], "aggressive")
+        # 其它顶层字段一个都不能动
+        self.assertEqual(payload["service"], "kimi-compat")
+        self.assertEqual(load(config=self.path).keep_preset, "aggressive")
+
+    def test_default_preset_is_not_written(self):
+        save_keep_preset(self.path, "aggressive")
+        save_keep_preset(self.path, "balanced")
+
+        payload = json.loads(self.path.read_text(encoding="utf-8"))
+        self.assertNotIn("keep_preset", payload)
+        self.assertEqual(load(config=self.path).keep_preset, "balanced")
+
+    def test_rejects_unknown_preset(self):
+        with self.assertRaises(ConfigError):
+            save_keep_preset(self.path, "whatever")
+
+    def test_models_save_keeps_the_preset(self):
+        """两条写路径互不打扰：保存候选表不能把刚改的预设抹掉。"""
+        save_keep_preset(self.path, "aggressive")
+
+        save_models(
+            self.path,
+            [{"name": "kimi", "service": "kimi-compat", "model": "kimi-k3", "api_key": ""}],
+        )
+
+        self.assertEqual(
+            json.loads(self.path.read_text(encoding="utf-8"))["keep_preset"], "aggressive"
+        )
+
+
+class ServiceHeaderTest(unittest.TestCase):
+    """网关必需头跟着 `service` 走：选了才有，没选一个都不加。"""
+
+    def test_opencode_service_brings_its_session_header(self):
+        settings = load(
+            env={
+                "GRADUS_SERVICE": "opencode-go",
+                "GRADUS_MODEL": "deepseek-v4.1-flash",
+                "GRADUS_API_KEY": "k",
+            }
+        )
+
+        self.assertEqual(settings.headers, {"x-opencode-session": "{run}"})
+        # 这不是用户写的，所以显式那一份仍然是空的
+        self.assertEqual(settings.explicit_headers, {})
+
+    def test_other_services_get_no_extra_headers(self):
+        for service, model in (
+            ("kimi-compat", "kimi-k3"),
+            ("deepseek", "deepseek-chat"),
+            ("anthropic", "claude"),
+        ):
+            with self.subTest(service=service):
+                settings = load(
+                    env={
+                        "GRADUS_SERVICE": service,
+                        "GRADUS_MODEL": model,
+                        "GRADUS_API_KEY": "k",
+                    }
+                )
+                self.assertEqual(settings.headers, {})
+
+    def test_explicit_header_overrides_the_service_default(self):
+        settings = load(
+            env={
+                "GRADUS_SERVICE": "opencode-go",
+                "GRADUS_MODEL": "deepseek-v4.1-flash",
+                "GRADUS_API_KEY": "k",
+                "GRADUS_HEADERS": "x-opencode-session=my-own-id",
+            }
+        )
+
+        self.assertEqual(settings.headers, {"x-opencode-session": "my-own-id"})
+        self.assertEqual(settings.explicit_headers, {"x-opencode-session": "my-own-id"})
+
+    def test_switching_models_keeps_headers_in_step_with_the_service(self):
+        path = Path(tempfile.mkdtemp()) / "config.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "service": "opencode-go",
+                    "model": "deepseek-v4.1-flash",
+                    "api_key": "k",
+                    "models": [
+                        {
+                            "name": "go",
+                            "service": "opencode-go",
+                            "model": "deepseek-v4.1-flash",
+                        },
+                        {"name": "kimi", "service": "kimi-compat", "model": "kimi-k3"},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        settings = load(config=path)
+
+        kimi = with_choice(settings, settings.models[1])
+        back = with_choice(kimi, settings.models[0])
+
+        self.assertEqual(settings.headers, {"x-opencode-session": "{run}"})
+        self.assertEqual(kimi.headers, {})
+        self.assertEqual(back.headers, {"x-opencode-session": "{run}"})
+
+    def test_ui_shaped_save_keeps_keys_and_capabilities(self):
+        """前端只提交 name / service / model / api_key：其余字段要原样留住。"""
+        path = Path(tempfile.mkdtemp()) / "config.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": [
+                        {
+                            "name": "go",
+                            "service": "opencode-go",
+                            "model": "deepseek-v4.1-flash",
+                            "api_key": "sk-entry",
+                            "context_window": 200_000,
+                        }
+                    ],
+                    "active": "go",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        save_models(
+            path,
+            [
+                {
+                    "name": "go",
+                    "service": "opencode-go",
+                    "model": "deepseek-v4.1-flash",
+                    "api_key": "",
+                }
+            ],
+        )
+
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        entry = payload["models"][0]
+        self.assertEqual(entry["api_key"], "sk-entry")
+        self.assertEqual(entry["context_window"], 200_000)
+
+
+class ContextDetailConfigTest(unittest.TestCase):
+    """上下文里四个细节上限：不填走常量，填了要校验。"""
+
+    KEYS = (
+        ("summary_layers", "GRADUS_SUMMARY_LAYERS"),
+        ("summary_tokens", "GRADUS_SUMMARY_TOKENS"),
+        ("recall_tokens", "GRADUS_RECALL_TOKENS"),
+        ("tool_output_chars", "GRADUS_OUTPUT_CHARS"),
+    )
+
+    def test_defaults_to_none(self):
+        settings = load(env=FULL_ENV)
+
+        for field, _ in self.KEYS:
+            with self.subTest(field=field):
+                self.assertIsNone(getattr(settings, field))
+
+    def test_reads_overrides(self):
+        settings = load(
+            env=dict(
+                FULL_ENV,
+                GRADUS_SUMMARY_LAYERS="2",
+                GRADUS_SUMMARY_TOKENS="1200",
+                GRADUS_RECALL_TOKENS="8000",
+                GRADUS_OUTPUT_CHARS="12000",
+            )
+        )
+
+        self.assertEqual(settings.summary_layers, 2)
+        self.assertEqual(settings.summary_tokens, 1_200)
+        self.assertEqual(settings.recall_tokens, 8_000)
+        self.assertEqual(settings.tool_output_chars, 12_000)
+
+    def test_rejects_non_positive_override(self):
+        for _, name in self.KEYS:
+            with self.subTest(name=name):
+                with self.assertRaises(ConfigError):
+                    load(env=dict(FULL_ENV, **{name: "0"}))
+                with self.assertRaises(ConfigError):
+                    load(env=dict(FULL_ENV, **{name: "-1"}))
+
+    def test_rejects_non_numeric_override(self):
+        for _, name in self.KEYS:
+            with self.subTest(name=name):
+                with self.assertRaises(ConfigError):
+                    load(env=dict(FULL_ENV, **{name: "lots"}))
+
+    def test_env_file_feeds_the_same_keys(self):
+        path = Path(tempfile.mkdtemp()) / ".env"
+        path.write_text(
+            "GRADUS_SUMMARY_LAYERS=4\nGRADUS_OUTPUT_CHARS=5000\n", encoding="utf-8"
+        )
+
+        with patch.dict("os.environ", FULL_ENV, clear=True):
+            envfile.load_env_file(path)
+            settings = load()
+
+        self.assertEqual(settings.summary_layers, 4)
+        self.assertEqual(settings.tool_output_chars, 5_000)
 
 _default_path_patch = None
 
@@ -696,3 +1153,18 @@ class SandboxConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class MaxTurnsTest(unittest.TestCase):
+    """轮数上限：默认 20，可用 GRADUS_MAX_TURNS 调大（长任务必需）。"""
+
+    def test_default_is_twenty(self):
+        self.assertEqual(load(env=dict(FULL_ENV)).max_turns, 20)
+
+    def test_env_override(self):
+        settings = load(env=dict(FULL_ENV, GRADUS_MAX_TURNS="60"))
+
+        self.assertEqual(settings.max_turns, 60)
+
+    def test_rejects_non_positive(self):
+        for bad in ("0", "-1", "abc"):
+            with self.assertRaises(ConfigError):
+                load(env=dict(FULL_ENV, GRADUS_MAX_TURNS=bad))

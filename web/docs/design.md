@@ -304,8 +304,8 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 | `fs/error` | 路径越界或读取失败 |
 | `workspace/dirs` | 工作区选择对话框的一次目录列表 `{ path, parent, dirs }`；`path` 为空时是起点（盘符 / 主目录）；原生选择的结果也走这一帧 |
 | `workspace/error` | 浏览目录失败（不存在等），或原生选择不可用 |
-| `model/state` | `{ activeId, models, active }`：候选模型与当前选中项，连接后与切换成功后各发一次 |
-| `settings/state` | 设置页输入 `{ path, services, models, current }`；`models` 每项带 `hasKey`，不回显 key |
+| `model/state` | `{ activeId, models, active }`：候选模型与当前选中项，连接后与切换成功后各发一次；`active` 另带预算摘要（`contextWindow` / `windowLimit` / `compactionThreshold` / `keepRecent` / `keepPreset`），未知时缺席 |
+| `settings/state` | 设置页输入 `{ path, services, models, current }`；`models` 每项带 `hasKey`，不回显 key；另带 `contextWindow` / `maxOutputTokens` / `windowLimit` / `outputLimit`（能力上限，未知时缺席） |
 | `settings/error` | 设置读取或保存失败，带 `message` |
 
 客户端发出：
@@ -325,8 +325,9 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 | `workspace/pick` | `{ path }`（起点提示），弹宿主进程的系统「选择文件夹」对话框；结果以 `workspace/dirs` 回来，取消不发帧。要不要显示这个入口看快照的 `capabilities` 里有没有 `workspace/pick` |
 | `model/select` | `{ id }`，切到 `model/state` 里的某个候选；生成中拒绝 |
 | `settings/get` | 拉设置页输入 |
-| `settings/save` | `{ models }`，整表写回配置文件的 `models`；生成中拒绝 |
-
+| `settings/save` | `{ models }`，整表写回配置文件的 `models`；生成中拒绝。条目里没提交的字段（key / 窗口 / 输出上限）沿用原文件同名条目 |
+| `settings/preset` | `{ preset }`，把保留量预设写回配置文件顶层（等于默认值就删掉这一项）；不拒绝生成中的会话，改完立刻对下一次压缩生效 |
+| `usage/state` | `{ turns, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }`，连接时发一次、每轮结束后再发；状态栏显示累计用量 |
 ### 5.3 AgentEvent 映射
 
 `gradus/agent/types.py` 的 `AgentEvent` 是 9 个 dataclass 的 union：
@@ -397,7 +398,8 @@ host 只在空闲时接受 `model/select`，成功后回 `model/state`；前端�
 顶栏齿轮打开设置面板（`plugins/settings.tsx`，挂 `shell.head-actions` 与 `app.overlay`），三段内容：外观（主题、字号）、模型服务商候选表、配置文件路径。
 
 - 读：`settings/get` → `settings/state`，候选表带 `hasKey` 布尔，**不回显 key**；`services` 是 `ai/services.py` 的 `SERVICES`，供填写时挑快捷名。
-- 写：`settings/save` → `save_models`，整表替换 `models`，其它顶层字段原样保留；`api_key` 留空沿用原文件同位置的值。写入走「临时文件 + 校验 + `os.replace`」，坏数据不覆盖原文件。
+- 写：`settings/save` → `save_models`，整表替换 `models`，其它顶层字段原样保留；条目里没提交的字段沿用原文件同名条目（`api_key` 留空表示「没改」，不是「清空」）。写入走「临时文件 + 校验 + `os.replace`」，坏数据不覆盖原文件。
+- 写：`settings/preset` → `save_keep_preset`，只动顶层 `keep_preset` 一个键；随后 `load` + `Session.apply_settings`，只换预算不重建 Agent，所以生成中也能改。
 - 保存成功后 host 重读配置再广播 `settings/state` 与 `model/state`，面板 600ms 后自动收起；失败留在原地显示 `settings/error`。
 
 ### 5.10 主题

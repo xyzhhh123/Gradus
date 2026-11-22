@@ -6,6 +6,7 @@ import type {
   SessionListPayload,
   Snapshot,
   StatusPayload,
+  UsageTotalsWire,
   WireEvent,
 } from '../protocol/frames'
 import type { SessionState, TurnState } from './state'
@@ -54,6 +55,9 @@ export function reduce(state: SessionState, frame: Frame): SessionState {
     case 'workspace/error': {
       const payload = frame.payload as { message: string }
       return { ...state, browseError: payload.message }
+    }
+    case 'usage/state': {
+      return { ...state, usage: frame.payload as UsageTotalsWire }
     }
     case 'model/state': {
       const payload = frame.payload as ModelStatePayload

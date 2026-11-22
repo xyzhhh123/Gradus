@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import httpx
 
 from ..base import ModelSpec, Provider
@@ -26,12 +28,16 @@ def create_provider(
     spec: ModelSpec,
     api_key: str = "",
     client: httpx.AsyncClient | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> Provider:
     """按 `spec.provider` 构造适配器。api_key 由上层读好传入，空串表示端点不需要鉴权。
 
     `client` 用于复用连接池：传入一个长活的 `httpx.AsyncClient`，多次 `stream()` 共用
     同一批连接，多轮对话不必每轮重做 TLS 握手。**所有权：注入的 client 由调用方关闭**，
     本层不会 `aclose()` 它；传 `None` 时每次 `stream()` 自建并在结束时关闭（D29）。
+
+    `headers` 是配置里的自定义请求头（网关要求的 org id、会话 id 之类），由适配器并进
+    每次请求；`{run}` 占位符按实例展开（见 `base.expand_headers`）。
 
     `fake` 不走工厂：它按剧本构造，签名是 `(spec, scripts)`，只在测试里直接实例化。
     """
@@ -41,4 +47,4 @@ def create_provider(
         raise ValueError(
             f"{spec.provider} 不能通过工厂构造（fake 按剧本构造，测试里直接实例化）"
         ) from None
-    return cls(spec, api_key, client=client)
+    return cls(spec, api_key, client=client, headers=headers)

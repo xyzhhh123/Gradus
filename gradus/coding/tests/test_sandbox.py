@@ -519,9 +519,35 @@ class AppContainerCleanupTest(unittest.IsolatedAsyncioTestCase):
             )
 
 
+class ScratchLayoutTest(unittest.TestCase):
+    """scratch 用普通 `mkdir` 建：`mkdtemp` 的受保护 DACL 沙箱子进程读不到。"""
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only scratch layout")
+    def test_scratch_avoids_mkdtemp_on_windows(self):
+        def boom(*_args, **_kwargs):
+            raise AssertionError(
+                "mkdtemp builds a protected DACL; the sandboxed child cannot read it"
+            )
+
+        with patch.object(tempfile, "mkdtemp", boom):
+            path = sandbox.create_scratch("gradus-test-")
+        self.addCleanup(shutil.rmtree, path, True)
+
+        self.assertTrue(path.is_dir())
+        self.assertTrue(path.name.startswith("gradus-test-"))
+        self.assertEqual(path.parent, Path(tempfile.gettempdir()))
+
+    def test_scratch_writes_owner_marker(self):
+        path = sandbox.create_scratch("gradus-test-")
+        self.addCleanup(shutil.rmtree, path, True)
+
+        marker = path / sandbox.SCRATCH_MARKER
+        self.assertTrue(marker.is_file())
+        self.assertEqual(marker.read_text(encoding="utf-8"), str(os.getpid()))
+
+
 class TempCleanupTest(unittest.TestCase):
     """临时目录里只回收自己的、超时的东西。"""
-
     def _stamp(self, path: Path, seconds_ago: float) -> None:
         moment = time.time() - seconds_ago
         os.utime(path, (moment, moment))
@@ -622,6 +648,61 @@ class RestrictedBackendTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("AddAccessRule", script)
         # 单引号路径要转义成两个单引号，否则 PowerShell 会提前结束字符串。
         self.assertIn("it''s", script)
+
+    async def test_acl_script_avoids_the_security_cmdlets(self):
+        """两个坑都踩过：`Get-Acl` 依赖模块，`Set-Acl` 在受保护 DACL 上要特权。
+
+        受保护的目录正是 `tempfile.mkdtemp` 造出来的那种（SDDL 带 `D:P`），
+        而 scratch 就是 mkdtemp 造的——所以脚本必须走 .NET 的 ACL API。
+        """
+        calls: list[tuple[str, ...]] = []
+
+        class FakeProcess:
+            async def wait(self) -> int:
+                return 0
+
+        async def fake_exec(*argv, **_kwargs):
+            calls.append(argv)
+            return FakeProcess()
+
+        with patch.object(restricted.asyncio, "create_subprocess_exec", fake_exec):
+            await restricted._acl(
+                Path("C:/tmp/scratch"), "S-1-5-21-1-2-3-4", "RemoveAccessRule"
+            )
+
+        script = calls[0][-1]
+        self.assertNotIn("Get-Acl", script)
+        self.assertNotIn("Set-Acl", script)
+        self.assertNotIn("New-Object", script)
+        self.assertIn("[System.IO.DirectoryInfo]::new", script)
+        self.assertIn("GetAccessControl()", script)
+        self.assertIn("SetAccessControl(", script)
+        self.assertIn("RemoveAccessRule", script)
+
+    @unittest.skipUnless(sys.platform == "win32", "restricted is Windows-only")
+    def test_acl_helper_gets_windows_powershell_module_paths(self):
+        """5.1 只该看见自己的三条模块路径，不能沿用它继承来的 PS7 路径。"""
+        ps7 = "C:/Program Files/PowerShell/Modules"
+        with patch.dict(
+            os.environ,
+            {
+                "PSModulePath": ps7 + os.pathsep + ps7,
+                "USERPROFILE": "C:/Users/tester",
+                "ProgramFiles": "C:/Program Files",
+                "SystemRoot": "C:/Windows",
+            },
+            clear=False,
+        ):
+            env = restricted._legacy_module_env()
+
+        expected = os.pathsep.join(
+            [
+                str(Path("C:/Users/tester/Documents/WindowsPowerShell/Modules")),
+                str(Path("C:/Program Files/WindowsPowerShell/Modules")),
+                str(Path("C:/Windows/System32/WindowsPowerShell/v1.0/Modules")),
+            ]
+        )
+        self.assertEqual(env["PSModulePath"], expected)
 
 
 if __name__ == "__main__":

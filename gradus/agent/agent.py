@@ -19,7 +19,7 @@ M6 先做最小门面：
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import suppress
 from dataclasses import replace
 from typing import Any, Literal
@@ -79,6 +79,7 @@ class Agent:
         *,
         api_key: str = "",
         client: httpx.AsyncClient | None = None,
+        headers: Mapping[str, str] | None = None,
         messages: list[Message] | None = None,
         steering_mode: QueueMode = "all",
         follow_up_mode: QueueMode = "all",
@@ -88,13 +89,14 @@ class Agent:
         `client=None` 时自建一个并拥有它，`aclose()` 负责关闭；传入 `client` 时只借用，
         `aclose()` 不关闭——同一个池子可以给多个 Agent / Provider 共用，由创建者统一关。
         传 `None` 且不调 `aclose()` 会泄漏，这条与 ai 层 `create_provider` 的约定一致。
+        `headers` 是配置里的自定义请求头（网关要求的 org id / 会话 id 之类），转给 Provider。
         """
         owned = client is None
         if client is None:
             client = httpx.AsyncClient()
 
         try:
-            provider = create_provider(spec, api_key, client=client)
+            provider = create_provider(spec, api_key, client=client, headers=headers)
         except BaseException:
             if owned:
                 await client.aclose()
@@ -120,14 +122,20 @@ class Agent:
         """当前历史的只读快照。"""
         return tuple(self._messages)
 
-    def prompt(self, text: str) -> AsyncIterator[AgentEvent]:
+    def prompt(
+        self,
+        text: str,
+        *,
+        origin: Literal["user", "harness"] = "user",
+    ) -> AsyncIterator[AgentEvent]:
         """带着一条新提问启动一次运行。
 
         提问不直接写进 `_messages`：它只进入本次运行的 transcript，并在终止事件的
         `new_messages` 里回来。取消时因此天然不会留下没人回答的提问。
+        `origin="harness"` 用于运行时发起的一轮（例如定时任务），只影响来源标记。
         """
         self._ensure_idle()
-        return self._start(prompt=UserMessage(text))
+        return self._start(prompt=UserMessage(text, origin=origin))
 
     def continue_(self, prompt: UserMessage | None = None) -> AsyncIterator[AgentEvent]:
         """不追加用户消息，直接在现有历史上再跑一次。
@@ -142,19 +150,40 @@ class Agent:
         """运行中插话；空闲时调用会抛 `RuntimeError`。"""
         self._push(self._steering, text, "steer")
 
-    def follow_up(self, text: str) -> None:
-        """追加一个“做完当前任务后”的任务；空闲时抛 `RuntimeError`。"""
-        self._push(self._follow_up, text, "follow_up")
+    def follow_up(
+        self,
+        text: str,
+        *,
+        origin: Literal["user", "harness"] = "user",
+    ) -> None:
+        """追加一个“做完当前任务后”的任务；空闲时抛 `RuntimeError`。
+
+        `origin="harness"` 用于运行时排入的任务（例如定时触发），
+        与 `notify` 的区别是它只在“这一轮本来要结束”时才被取走。
+        """
+        self._push(self._follow_up, text, "follow_up", origin)
+
+    def notify(self, text: str) -> None:
+        """注入一条非用户来源的消息（如后台任务完成通知）。
+
+        与 `steer` 的唯一区别：空闲时静默丢弃，不抛异常——后台完成的时机不由
+        调用方决定，没有可返回错误的调用栈。排队与 drain 点与 steering 完全一致，
+        因此和插话一样属于单次运行，不会泄漏到下一次运行。
+        """
+        if self._state != "running" or self._steering is None:
+            return
+        self._steering.push(UserMessage(text, origin="harness"))
 
     def _push(
         self,
         queue: PendingMessageQueue | None,
         text: str,
         name: str,
+        origin: Literal["user", "harness"] = "user",
     ) -> None:
         if self._state != "running" or queue is None:
             raise RuntimeError(f"cannot {name}: agent is not running")
-        queue.push(UserMessage(text))
+        queue.push(UserMessage(text, origin=origin))
 
     async def abort(self) -> None:
         """取消当前运行；已完成的轮次保留在历史里。"""

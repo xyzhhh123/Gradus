@@ -42,6 +42,17 @@ def usage_payload(usage: Usage) -> dict[str, int]:
     return {"inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens}
 
 
+def usage_totals_payload(totals: dict[str, int]) -> dict[str, int]:
+    """会话累计用量：状态栏用，字段名跟事件里的 `usage` 保持一致。"""
+    return {
+        "turns": totals.get("turns", 0),
+        "inputTokens": totals.get("input", 0),
+        "outputTokens": totals.get("output", 0),
+        "cacheReadTokens": totals.get("cacheRead", 0),
+        "cacheWriteTokens": totals.get("cacheWrite", 0),
+    }
+
+
 def tool_call_payload(call: ToolCallBlock) -> dict[str, Any]:
     return {"id": call.id, "name": call.name, "args": call.arguments}
 
@@ -110,14 +121,56 @@ def history_payload(messages: tuple[Message, ...]) -> list[dict[str, Any]]:
     return payloads
 
 
-def model_summary(settings: Any) -> dict[str, str]:
-    """当前模型的展示信息；`settings` 是 `coding.config.Settings`。"""
+def model_summary(settings: Any) -> dict[str, Any]:
+    """当前模型的展示信息；`settings` 是 `coding.config.Settings`。
+
+    除了名字还给**能力与预算**：窗口上限来自模型元数据/静态表，预算口径可能被显式值
+    压低，触发线与保留量由两者推导。界面上「这个模型能用多大、现在按多大管」需要
+    这三个数才说得清，所以在这里一次算好，前端不必重算。
+    """
+    from ..coding.context import ContextBudget, ContextBudgetError
+
     spec = settings.spec
     name = next(
         (choice.name for choice in settings.models if choice.spec == spec),
         f"{spec.model} · {spec.provider}",
     )
-    return {"name": name, "provider": spec.provider, "model": spec.model}
+    summary: dict[str, Any] = {
+        "name": name,
+        "provider": spec.provider,
+        "model": spec.model,
+    }
+    # 能力与预算只有在知道的时候才报：缺席表示「这个端点没说」，不是「0」。
+    window = getattr(spec, "context_window", None)
+    output = getattr(spec, "max_output_tokens", None)
+    if window is None or output is None:
+        return summary
+
+    summary["contextWindow"] = window
+    summary["maxOutputTokens"] = output
+    for key, value in (
+        ("windowLimit", getattr(spec, "window_limit", None)),
+        ("outputLimit", getattr(spec, "output_limit", None)),
+        ("keepPreset", getattr(settings, "keep_preset", None)),
+    ):
+        if value is not None:
+            summary[key] = value
+
+    try:
+        budget = ContextBudget.for_model(
+            spec.context_window,
+            spec.max_output_tokens,
+            reserve_tokens=getattr(settings, "context_reserve_tokens", None)
+            or 16_384,
+            keep_tokens=getattr(settings, "context_keep_tokens", None),
+            keep_preset=getattr(settings, "keep_preset", "balanced"),
+        )
+    except ContextBudgetError as exc:
+        summary["budgetError"] = str(exc)
+        return summary
+    summary["compactionThreshold"] = budget.threshold
+    summary["keepRecent"] = budget.keep_recent
+    return summary
 
 
 def snapshot_payload(

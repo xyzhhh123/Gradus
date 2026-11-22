@@ -23,6 +23,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import uuid4
 
 from gradus.ai.base import ModelSpec
 from gradus.coding import session, workspace
@@ -45,6 +46,20 @@ def _settings() -> Settings:
         api_key="dummy",
         sandbox=BACKEND,
     )
+
+
+def _user_dir(prefix: str) -> Path:
+    """建一个「普通用户目录」，不用 `TemporaryDirectory`。
+
+    `TemporaryDirectory` 底层是 `tempfile.mkdtemp`，在 Windows 上建出来的目录带
+    **受保护 DACL**（`D:P`，只授 OWNER RIGHTS / SYSTEM / Administrators）。受限令牌
+    是 LUA 过滤令牌，`OWNER RIGHTS` 匹配不上，于是它读不到里面的文件——这样的目录
+    验不了「读与当前用户一致」，只能用普通 `mkdir`（继承 `%TEMP%` 的 ACE，其中含
+    用户 SID）。
+    """
+    path = Path(tempfile.gettempdir()) / f"{prefix}{uuid4().hex[:8]}"
+    path.mkdir()
+    return path
 
 
 def _git(repo: Path, *argv: str) -> None:
@@ -82,8 +97,7 @@ class SandboxContractTest(unittest.IsolatedAsyncioTestCase):
     """一次会话里逐条核对沙箱契约。"""
 
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.base = Path(self._tmp.name)
+        self.base = _user_dir("gradus-live-contract-")
         self.host = _make_host(self.base, tracked=True)
         self.outside = self.base / "outside"
         self.outside.mkdir()
@@ -96,7 +110,7 @@ class SandboxContractTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.one.aclose()
         await session.close_pool()
-        self._tmp.cleanup()
+        shutil.rmtree(self.base, ignore_errors=True)
 
     async def _run(
         self, command: str, *, timeout: float | None = None

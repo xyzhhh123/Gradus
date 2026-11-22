@@ -16,6 +16,7 @@ import os
 import secrets
 import string
 import sys
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from ..agent.types import AgentEvent
 from ..ai.envfile import load_env_file
 from ..ai.services import SERVICES
 from ..coding.config import (
@@ -34,11 +36,15 @@ from ..coding.config import (
     default_config_path,
     load,
     save_active,
+    save_keep_preset,
     save_models,
     with_active,
     with_choice,
 )
+from ..coding.context import preset_catalog
 from ..coding.mcp import McpConfigError
+from ..coding.multiagent import AgentTeam
+from ..coding.schedule import ScheduledJob
 from ..coding.session import Session, SessionError
 from .wire import (
     CAPABILITIES as BASE_CAPABILITIES,
@@ -46,6 +52,7 @@ from .wire import (
     encode_event,
     model_summary,
     snapshot_payload,
+    usage_totals_payload,
 )
 
 DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
@@ -180,6 +187,8 @@ class Connection:
         self.session: Session | None = None
         self.run_task: asyncio.Task[None] | None = None
         self.switch_task: asyncio.Task[None] | None = None
+        self.clock_task: asyncio.Task[None] | None = None
+        self.team: AgentTeam | None = None
         self.workspace = Path(args.workspace).expanduser() if args.workspace else Path.cwd()
         self.confirm = ConfirmBridge(self, args.confirm_timeout)
 
@@ -219,6 +228,7 @@ class Connection:
             await self.send("session/snapshot", snapshot_payload(self.session, CAPABILITIES))
             await self.send_sessions()
             await self.send_model_state()
+            await self.send_usage_state()
             while True:
                 command = await self.ws.receive_json()
                 await self.handle(command)
@@ -262,6 +272,135 @@ class Connection:
             resume=resume,
         )
         self.workspace = self.session.workspace
+        self.start_clock()
+        self.team = (
+            AgentTeam(
+                self.session.tasks,
+                self.session.spawn,
+                lead_notify=self.session.notify,
+            )
+            if self.session.tasks is not None
+            else None
+        )
+        # 多 agent 工具在建会话时就注册了，那时团队还不存在，靠这个引用回填。
+        self.session.attach_team(self.team)
+
+    def start_clock(self) -> None:
+        """给当前会话配一个时钟；切会话时先停旧的再起新的。"""
+        if self.clock_task is not None and not self.clock_task.done():
+            return
+        self.clock_task = asyncio.create_task(self.clock())
+
+    async def stop_clock(self) -> None:
+        task = self.clock_task
+        self.clock_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def stop_team(self) -> None:
+        """关闭全部子 agent；会话销毁前必须调用，否则它们会留在内存里。"""
+        team = self.team
+        self.team = None
+        if self.session is not None:
+            self.session.attach_team(None)
+        if team is not None:
+            await team.aclose()
+
+    async def clock(self) -> None:
+        """每秒看一次任务表，空闲时点火一轮。
+
+        看表与跑必须分开：这里只做标记与 `create_task`，绝不 `await` 整个运行，
+        否则一个长任务会让时钟停摆，后面到点的任务连「到点了」都记不下来。
+        """
+        while True:
+            try:
+                self.tick()
+            except Exception:  # 任务表坏了不该让时钟退出
+                pass
+            await asyncio.sleep(1)
+
+    def tick(self) -> None:
+        """一次 tick：标记到点任务，最多点火一条。
+
+        派活不在这里——子 agent 由模型显式 `spawn_agent` 启动。
+        """
+        job = self._next_job()
+        if job is not None:
+            self.run_task = asyncio.create_task(self.run_scheduled(job))
+
+    def _next_job(self) -> ScheduledJob | None:
+        """这一秒该跑哪条：先标记，再要求会话空闲且没有在跑的一轮。"""
+        session = self.session
+        if session is None:
+            return None
+
+        session.take_due()
+        if self.run_task is not None and not self.run_task.done():
+            return None
+        if session.state != "idle":
+            return None
+
+        pending = session.pending_jobs()
+        return pending[0] if pending else None
+
+    async def run_scheduled(self, job: ScheduledJob) -> None:
+        """闹钟替用户按下回车：把定时任务的提示词跑成一轮。"""
+        session = self.session
+        if session is None:
+            return
+
+        await self.send(
+            "session/message",
+            {
+                "id": f"u-{self.next_id()}",
+                "role": "user",
+                "text": f"[Scheduled] {job.prompt}",
+            },
+        )
+        await self.send("session/status", {"status": "running"})
+
+        try:
+            events = session.prompt_scheduled(job)
+        except Exception as exc:
+            await self._finish_turn({"kind": "internal", "message": str(exc)})
+            return
+
+        await self._finish_turn(await self._pump(events))
+
+    async def _pump(self, events: AsyncIterator[AgentEvent]) -> dict[str, Any] | None:
+        """把一轮事件流转给前端，返回需要上报的错误（没有则 `None`）。"""
+        error: dict[str, Any] | None = None
+        try:
+            async for event in events:
+                payload = encode_event(event)
+                if payload is None:
+                    continue
+                if payload["type"] == "agent/error" and payload["kind"] != "aborted":
+                    error = {"kind": payload["kind"], "message": payload["message"]}
+                await self.send("agent/event", payload)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # 未预期的异常也要让前端看到，而不是静默断开
+            error = {"kind": "internal", "message": str(exc)}
+        finally:
+            # 中止时可能还有工具在等确认；不清理会让前端一直显示审批面板。
+            self.confirm.reject_all()
+        return error
+
+    async def _finish_turn(self, error: dict[str, Any] | None) -> None:
+        if error is None:
+            await self.send("session/status", {"status": "idle"})
+        else:
+            await self.send("session/status", {"status": "error", "error": error})
+        # 标题取首条提问，跑完刷新一次，侧栏才能看到新标题。
+        await self.send_sessions()
+        # 用量账本每轮追加一条，跑完把累计推给状态栏。
+        await self.send_usage_state()
 
     def list_sessions(self) -> list[dict[str, Any]]:
         """扫会话目录，只读头部和第一条用户消息，按修改时间倒序。"""
@@ -473,6 +612,15 @@ class Connection:
                 "model": choice.spec.model,
                 "baseUrl": choice.spec.base_url,
                 "hasKey": bool(choice.api_key),
+                # 只回**显式**写过的窗口/输出：`spec` 里那个是推导后的实际值，
+                # 拿它回填会让「没配」在界面上看起来像「配了 128000」。
+                "contextWindow": choice.context_window,
+                "maxOutputTokens": choice.max_output_tokens,
+                "windowLimit": choice.spec.window_limit,
+                "outputLimit": choice.spec.output_limit,
+                # 推导后的实际口径：界面显示「现在按多大管」用这两个。
+                "effectiveWindow": choice.spec.context_window,
+                "effectiveOutput": choice.spec.max_output_tokens,
             }
             for index, choice in enumerate(settings.models)
         ]
@@ -484,7 +632,12 @@ class Connection:
             ],
             "models": models,
             "current": model_summary(settings),
+            "keepPreset": settings.keep_preset,
+            "presets": preset_catalog(),
         }
+
+    async def send_usage_state(self) -> None:
+        await self.send("usage/state", usage_totals_payload(self.session.usage_totals))
 
     async def send_model_state(self) -> None:
         await self.send("model/state", self.model_state())
@@ -561,6 +714,30 @@ class Connection:
         # 保存候选表不该把当前选中的模型顶掉：仍按本连接记着的名字切回去，
         # 该候选被删掉时 `with_active` 会保持顶层配置的模型。
         self.settings = with_active(replace(fresh, active=self.settings.active))
+        await self.send("settings/state", self.settings_state())
+        await self.send_model_state()
+
+    async def handle_settings_preset(self, preset: str) -> None:
+        """切换保留量预设：写回配置文件顶层，重读后广播新预算。
+
+        预设是「下一次压缩用多少保留量」，改动不影响正在跑的这一轮，所以不需要
+        像 `settings/save` 那样拒绝运行中的会话。
+        """
+        try:
+            await asyncio.to_thread(save_keep_preset, self.args.config, preset)
+            fresh = load(overrides={}, config=self.args.config)
+        except (ConfigError, OSError) as exc:
+            await self.send("settings/error", {"message": str(exc)})
+            return
+
+        self.settings = with_active(replace(fresh, active=self.settings.active))
+        # 会话已经建好时，预算跟着改：换预设要让下一次压缩就用新值。
+        session = self.session
+        if session is not None:
+            try:
+                await session.apply_settings(self.settings)
+            except (SessionError, RuntimeError, ConfigError, OSError):
+                pass
         await self.send("settings/state", self.settings_state())
         await self.send_model_state()
 
@@ -675,6 +852,8 @@ class Connection:
             await self.handle_settings_get()
         elif kind == "settings/save":
             await self.handle_settings_save(command.get("models"))
+        elif kind == "settings/preset":
+            await self.handle_settings_preset(str(command.get("preset") or ""))
         elif kind == "fs/list":
             await self.handle_list(str(command.get("path") or ""))
         elif kind == "fs/read":
@@ -770,29 +949,19 @@ class Connection:
 
         error: dict[str, Any] | None = None
         try:
-            async for event in session.prompt(text):
-                payload = encode_event(event)
-                if payload is None:
-                    continue
-                if payload["type"] == "agent/error" and payload["kind"] != "aborted":
-                    error = {"kind": payload["kind"], "message": payload["message"]}
-                await self.send("agent/event", payload)
-        except asyncio.CancelledError:
-            raise
+            events = session.prompt(text)
         except Exception as exc:  # 未预期的异常也要让前端看到，而不是静默断开
             error = {"kind": "internal", "message": str(exc)}
-        finally:
-            # 中止时可能还有工具在等确认；不清理会让前端一直显示审批面板。
-            self.confirm.reject_all()
-
-        if error is None:
-            await self.send("session/status", {"status": "idle"})
         else:
-            await self.send("session/status", {"status": "error", "error": error})
-        # 标题取首条提问，跑完刷新一次，侧栏才能看到新标题。
-        await self.send_sessions()
+            error = await self._pump(events)
+
+        await self._finish_turn(error)
 
     async def shutdown(self) -> None:
+        # 先停时钟与调度：否则关会话的同时它们还在点火下一条。
+        await self.stop_clock()
+        await self.stop_team()
+
         session = self.session
         if session is None:
             return

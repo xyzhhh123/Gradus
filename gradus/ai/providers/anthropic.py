@@ -113,13 +113,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 from typing import Any
 
 import httpx
 
-from ..base import THINKING_BUDGETS, ModelSpec, Request, ToolSpec
+from ..base import expand_headers, THINKING_BUDGETS, ModelSpec, Request, ToolSpec
 from ..stream_assembler import StreamAssembler
 from ..transport import TransportFailure, post_sse
 from ..types import (
@@ -320,9 +320,12 @@ class AnthropicProvider:
         spec: ModelSpec,
         api_key: str = "",
         client: httpx.AsyncClient | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         self.spec = spec
         self.api_key = api_key
+        # 配置里的自定义请求头；`{run}` 在这里展开成实例级随机 id
+        self._extra_headers = expand_headers(headers)
         # 注入的 client 由调用方关闭；None 时 post_sse 每次自建并 aclose（D29）
         self._client = client
 
@@ -348,80 +351,84 @@ class AnthropicProvider:
         usage = Usage()
 
         try:
-            async for event in post_sse(
+            events = post_sse(
                 self._url(),
                 headers=self._headers(),
                 payload=payload,
                 client=self._client,
-            ):
-                if isinstance(event, TransportFailure):
-                    for _event in assembler.fail("error", event.message):
-                        yield _event
-                    return
-
-                kind = event.event
-                if kind == "ping":
-                    continue
-
-                data = json.loads(event.data)
-
-                if kind == "message_start":
-                    # input 用量在这里，output 在 message_delta
-                    usage = merge_usage(Usage(), data.get("message", {}).get("usage") or {})
-                    assembler.set_usage(with_total_input(usage))
-
-                elif kind == "content_block_start":
-                    block = data["content_block"]
-                    block_type = block.get("type")
-                    if block_type == "text":
-                        for _event in assembler.start_text():
+            )
+            try:
+                async for event in events:
+                    if isinstance(event, TransportFailure):
+                        for _event in assembler.fail("error", event.message):
                             yield _event
-                    elif block_type == "thinking":
-                        for _event in assembler.start_thinking():
-                            yield _event
-                    elif block_type == "tool_use":
-                        for _event in assembler.start_tool(block["id"], block["name"]):
-                            yield _event
+                        return
 
-                elif kind == "content_block_delta":
-                    delta = data["delta"]
-                    delta_type = delta.get("type")
-                    if delta_type == "text_delta":
-                        for _event in assembler.text(delta["text"]):
-                            yield _event
-                    elif delta_type == "thinking_delta":
-                        for _event in assembler.thinking(delta["thinking"]):
-                            yield _event
-                    elif delta_type == "signature_delta":
-                        signature += delta["signature"]
-                    elif delta_type == "input_json_delta":
-                        for _event in assembler.tool_arguments(delta["partial_json"]):
-                            yield _event
+                    kind = event.event
+                    if kind == "ping":
+                        continue
 
-                elif kind == "content_block_stop":
-                    # 三个 end 都是幂等的，只有当前打开的那个会真正产出事件
-                    for _event in assembler.end_text():
-                        yield _event
-                    for _event in assembler.end_thinking(signature or None):
-                        yield _event
-                    for _event in assembler.end_tool():
-                        yield _event
-                    signature = ""
+                    data = json.loads(event.data)
 
-                elif kind == "message_delta":
-                    delta = data.get("delta") or {}
-                    if reason := delta.get("stop_reason"):
-                        stop_reason = STOP_REASONS.get(reason, "stop")
-                    if raw_usage := data.get("usage"):
-                        usage = merge_usage(usage, raw_usage)
+                    if kind == "message_start":
+                        # input 用量在这里，output 在 message_delta
+                        usage = merge_usage(Usage(), data.get("message", {}).get("usage") or {})
                         assembler.set_usage(with_total_input(usage))
 
-                elif kind == "error":
-                    error = data.get("error") or {}
-                    for _event in assembler.fail("error", error.get("message", "anthropic error")):
-                        yield _event
-                    return
+                    elif kind == "content_block_start":
+                        block = data["content_block"]
+                        block_type = block.get("type")
+                        if block_type == "text":
+                            for _event in assembler.start_text():
+                                yield _event
+                        elif block_type == "thinking":
+                            for _event in assembler.start_thinking():
+                                yield _event
+                        elif block_type == "tool_use":
+                            for _event in assembler.start_tool(block["id"], block["name"]):
+                                yield _event
 
+                    elif kind == "content_block_delta":
+                        delta = data["delta"]
+                        delta_type = delta.get("type")
+                        if delta_type == "text_delta":
+                            for _event in assembler.text(delta["text"]):
+                                yield _event
+                        elif delta_type == "thinking_delta":
+                            for _event in assembler.thinking(delta["thinking"]):
+                                yield _event
+                        elif delta_type == "signature_delta":
+                            signature += delta["signature"]
+                        elif delta_type == "input_json_delta":
+                            for _event in assembler.tool_arguments(delta["partial_json"]):
+                                yield _event
+
+                    elif kind == "content_block_stop":
+                        # 三个 end 都是幂等的，只有当前打开的那个会真正产出事件
+                        for _event in assembler.end_text():
+                            yield _event
+                        for _event in assembler.end_thinking(signature or None):
+                            yield _event
+                        for _event in assembler.end_tool():
+                            yield _event
+                        signature = ""
+
+                    elif kind == "message_delta":
+                        delta = data.get("delta") or {}
+                        if reason := delta.get("stop_reason"):
+                            stop_reason = STOP_REASONS.get(reason, "stop")
+                        if raw_usage := data.get("usage"):
+                            usage = merge_usage(usage, raw_usage)
+                            assembler.set_usage(with_total_input(usage))
+
+                    elif kind == "error":
+                        error = data.get("error") or {}
+                        for _event in assembler.fail("error", error.get("message", "anthropic error")):
+                            yield _event
+                        return
+
+            finally:
+                await events.aclose()
             for _event in assembler.done(stop_reason):
                 yield _event
 
@@ -444,4 +451,5 @@ class AnthropicProvider:
         # 本厂商用 x-api-key，不是 Authorization
         if self.api_key:
             headers["x-api-key"] = self.api_key
+        headers.update(self._extra_headers)
         return headers

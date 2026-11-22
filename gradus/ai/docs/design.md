@@ -11,10 +11,21 @@ README 讲这一层对外是什么形状；这里讲每个文件内部怎么做�
 
 即 README「数据模型」一节那套内部协议。除标准库外不 import 任何东西。
 `stop_reason` 七个值各自对应的上层动作，写在源码 `StopReason` 上方的注释里，改一处即可。
+`UserMessage.origin`（`"user"` / `"harness"`）只标来源，不进入 wire：适配器只读 `content`；
+需要区分的地方（UI、会话文件、压缩标注）自行读这个字段。
 
 ### `base.py`
 
 请求侧类型与 `Provider` 协议。没有实现。
+
+`ModelSpec` 里有四个数与容量有关，别混：`context_window` / `max_output_tokens` 是
+**预算口径**（上层按多大做上下文管理与发请求），`window_limit` / `output_limit` 是
+**模型能力**（元数据或静态表给的物理上限，可能为 `None`）。前者可以比后者小——故意压低是
+成本控制，`coding` 负责收敛到上限以内。本层只搬运这四对数，不做任何取舍。
+
+`expand_headers(headers, *, run_id=None)` 把配置里的自定义请求头展开成实际值：`{run}` 换成本次运行的随机 id，**幂等**——已展开的值再调用不变，所以上层可以提前固化。为什么放在 `ai`：它服务的是「每次请求发什么头」，和 `Run`/`Provider` 同一层；不提前固化时退化为「一个 Provider 实例一个 id」。
+
+**必须提前固化**：`coding.session` 在会话创建时展开一次，主对话、摘要、合并共用同一个 id。摘要会新建 Provider，若不固化就会带另一个 id，网关按 id 分流，摘要被送到**没缓存的机器**上——实测同一段前缀 `cache_read` 从 18,560 掉到 0（见 `coding/docs/problem.md`）。
 
 ### `stream_assembler.py`
 
@@ -37,9 +48,19 @@ README 讲这一层对外是什么形状；这里讲每个文件内部怎么做�
 `SseEvent` 只有 `event` 与 `data`；`TransportFailure` 只有 `message` 与 `status_code`。
 把它变成 `StreamError` 是适配器的事。
 
+**谁打开谁关闭**：`async for` 在 `break` / `GeneratorExit` 时不会关闭迭代器。流式链
+`provider.stream → post_sse → _post_with_retry → _parse_sse_async → httpx` 里，每一层都要在
+`finally` 里 `await` 关闭下一层；否则被抛弃的生成器要等事件循环关闭才被 GC 收尾，那时它正
+处于自己的 `athrow` 中，会报 `aclose(): asynchronous generator is already running`。
+provider 在收到 `[DONE]` 时是 `break` 退出循环的，所以这一条不是理论问题。
+
 `client` 可注入：测试用 `httpx.MockTransport` 就能完全离线；上层注入一个长期存活的
 `httpx.AsyncClient` 即可共享连接池，注入的 client 由调用方关闭。不注入时每次 `post_sse`
 自建一个并在结束时 `aclose()`。明确不做：代理认证、HTTP/2 调优、按厂商分级重试。
+
+自建 client 时统一带 `DEFAULT_HEADERS`，目前只有一条 `User-Agent: gradus/<版本>`
+（`importlib.metadata` 取不到版本时退回 `gradus`）。有些网关明确要求客户端自报家门而不是
+用通用 SDK 的 UA；注入 client 时由注入方决定，本层不覆盖。
 
 ### `envfile.py`
 
@@ -60,14 +81,52 @@ README 讲这一层对外是什么形状；这里讲每个文件内部怎么做�
 放在 `ai` 的理由与 `envfile.py` 相同：`record.py` 在 `ai` 内，依赖方向只允许
 `coding -> ai`，两边共用一张表才不会各写一份。
 
+`opencode-go` 是唯一需要额外请求头的条目：它要 `x-opencode-session`，缺了直接 400。表里只
+放端点，头登记在下面的 `SERVICE_HEADERS`。
+
+### `SERVICE_HEADERS`
+
+`service -> {请求头: 值}`，只放「选了这项就**必须**带」的头。**只对该服务生效**：没选这个
+`service` 的会话一个头都不会多（`coding.config` 按 `service` 现算，空服务就是空字典）。
+值里的 `{run}` 由 `base.expand_headers` 换成本次会话的随机 id；用户显式配的 `headers` 覆盖
+同名项，想自己指定会话 id 就自己写。
+
+**为什么不给 OpenCode 写一个 `opencode.py` 适配器**：它和 `openai_compat` 的线上形状完全
+相同——同一个 `POST /chat/completions`、同一套 `delta.*` / `finish_reason` / `usage` 映射，
+差别只有「base_url 不同」和「多一个必需请求头」，两件都是**数据**，不是逻辑。单写一个类意味着
+把 350 行映射逻辑复制一份，以后修 bug 要改两处，还容易漂移（这正是 `services.py` 存在的理由：
+把「端点与协议」做成表）。什么时候才该新开适配器？当**线上形状不同**时——像 `anthropic`
+（`tool_use` 内容块、`signature`、`cache_control`）或 `openai_responses`（item/part/delta 三层、
+`store=false`）。判据是「要不要写新的翻译代码」，不是「换了一家厂商」。
+
+### `models.py`
+
+模型能力表 + 可选探测。回答「这个模型最多能装多少」，**不是**「我们按多大做上下文管理」。
+
+| 入口 | 说明 |
+| --- | --- |
+| `VERIFIED_LIMITS` | 实测过的 `model -> (窗口, 输出上限)`；**只填验证过的**，填错比不填更糟（预算按错的数算，压缩可能在窗口外触发） |
+| `limits_for(model)` | 查表；id 归一化后匹配（`opencode/deepseek-v4.1-flash-1017` 能命中裸名，前缀也认） |
+| `parse_limits(entry)` | 从一条 `/models` 记录里取上限：先看 `limit.context` / `limit.output`，再看平铺的 `context_window` 等；允许只报一项 |
+| `fetch_limits(base_url, model, ...)` | `GET {base}/models` 挑出这个模型的上限；**任何一种失败都返回 `None`**，超时 2s、不重试 |
+
+刻意不抛异常、不重试：这是启动路径上的加固信息，拿不到就退回静态表与 `coding` 的默认值。
+无依赖（只 import `httpx` 与标准库），不知道 `coding` 的存在，也不决定预算——取舍在
+`coding.config` 里（显式 > 元数据 > 表 > 默认）。
+
 ### `providers/__init__.py`
 
-上层唯一的构造入口 `create_provider(spec, api_key, client=None) -> Provider`：按 `spec.provider`
-在 `CLASSES` 里选实现。映射表只留这一份，新增一家改一行。工厂放这里而不是 `base.py`
-是因为依赖方向 `providers -> base`，写进 `base` 会成环；也不代表上层该 import 具体类。
+上层唯一的构造入口 `create_provider(spec, api_key, client=None, headers=None) -> Provider`：
+按 `spec.provider` 在 `CLASSES` 里选实现。映射表只留这一份，新增一家改一行。工厂放这里而
+不是 `base.py` 是因为依赖方向 `providers -> base`，写进 `base` 会成环；也不代表上层该
+import 具体类。
 
 `client` 用来复用连接池：注入一个长活的 `httpx.AsyncClient`，多次 `stream()` 共用同一批连接。
 **所有权在注入方**——本层不会 `aclose()` 它；`None` 时每次 `stream()` 自建并在结束时关闭（D29）。
+
+`headers` 是配置里的自定义请求头。四个适配器都在构造时 `expand_headers(...)` 展开一次，
+放进各自的 `_headers()`（在鉴权头之后 `update`，所以自定义头能覆盖默认值，但不会挤掉
+`Authorization` / `x-api-key`）。放工厂而不是四个类里各写一遍，是为了「谁负责展开」只有一处。
 
 `fake` 不走工厂——它按剧本构造，签名是 `(spec, scripts)`，只在测试里直接实例化。
 
@@ -268,7 +327,7 @@ uv run pytest
 
 ### `tests/test_openai_compat.py`
 
-30 条断言，请求侧 13 条 + 响应侧 17 条。
+34 条断言，请求侧 13 条 + 响应侧 17 条 + 自定义请求头 4 条。
 
 - `build_payload`：system 落位、空 system 省略、`stream` 恒开、`max_tokens` 回退到
   `ModelSpec`、`temperature` 为 `None` 时不出现、`reasoning_effort` 未设置时不出现、
@@ -279,6 +338,8 @@ uv run pytest
 - 响应侧：文本流、工具分片拼接、并行工具按 index 分开、reasoning、usage（顶层与
   `choices[0]` 两处都要认，且只算一次）、`length`、拒答 → `filtered` 且单独成块、
   中断保留工具骨架、多候选只取 `index 0`、流内 `error`、`TransportFailure`、坏 JSON、非对象 JSON、URL 与鉴权头
+- 自定义头：并进请求、不挤掉 `Authorization`、`{run}` 在同一实例内稳定且换实例就变、
+  不传时默认头不受影响
 
 ### `tests/test_openai_responses.py`
 
@@ -290,6 +351,16 @@ uv run pytest
   拒答 → `filtered` 且单独成块、reasoning → `ThinkingBlock` 带 `signature`、
   中断保留工具骨架、`incomplete` → `length`、`response.failed`、`error` 事件、
   usage 的 `cached_tokens`、`TransportFailure`、URL 与 `Bearer`
+
+### `tests/test_models.py`
+
+13 条断言，全离线（`httpx.MockTransport`）。
+
+- 查表：验证过的模型能查到、带命名空间/后缀的 id 能归一到裸名、没验证过的返回 `None`
+- 解析元数据：OpenAI 形状的 `limit.{context,output}`、平铺字段、只报一项时另一项留空、
+  布尔不算上限、空记录返回 `None`
+- 探测：从列表里挑中目标模型、HTTP 5xx / 连不上 / 模型不在列表里都静默返回 `None`、
+  `api_key` 会变成 `Bearer`
 
 ### `tests/test_provider_factory.py`
 

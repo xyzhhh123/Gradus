@@ -37,6 +37,15 @@ export interface UsageWire {
   outputTokens: number
 }
 
+/** 会话累计用量（`usage/state` 帧），字段名与 `UsageWire` 一致。 */
+export interface UsageTotalsWire {
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
 export interface MessageWire {
   id: string
   role: 'user' | 'assistant'
@@ -64,11 +73,26 @@ export interface SandboxInfo {
   warning: string | null
 }
 
-/** 当前模型；`name` 是配置里给候选起的显示名。 */
+/**
+ * 当前模型；`name` 是配置里给候选起的显示名。
+ *
+ * 能力与预算字段是可选的：宿主只在知道的时候才报（登记不了的端点没有上限，
+ * 不是 0）。`windowLimit` / `outputLimit` 是模型能力，`contextWindow` /
+ * `maxOutputTokens` 是我们实际按多大管、按多大发请求；`compactionThreshold` 与
+ * `keepRecent` 由这两者推导。
+ */
 export interface ModelSummary {
   name: string
   provider: string
   model: string
+  contextWindow?: number
+  maxOutputTokens?: number
+  windowLimit?: number
+  outputLimit?: number
+  keepPreset?: string
+  compactionThreshold?: number
+  keepRecent?: number
+  budgetError?: string
 }
 
 export interface ModelInfo extends ModelSummary {
@@ -96,6 +120,14 @@ export interface ProviderEntry {
   model: string
   baseUrl: string
   hasKey: boolean
+  /** 只含**显式配置**的值；没配就是 undefined，输入框留空。 */
+  contextWindow?: number
+  maxOutputTokens?: number
+  windowLimit?: number
+  outputLimit?: number
+  /** 推导后的实际口径（能力或默认值），只读展示。 */
+  effectiveWindow?: number
+  effectiveOutput?: number
 }
 
 export interface SettingsStatePayload {
@@ -104,6 +136,16 @@ export interface SettingsStatePayload {
   services: ServiceInfo[]
   models: ProviderEntry[]
   current: ModelSummary
+  /** 当前的保留量预设名与全部可选预设；旧后端没有这两项。 */
+  keepPreset?: string
+  presets?: PresetInfo[]
+}
+
+/** 保留量预设：名字给配置，`label` / `detail` 给界面。 */
+export interface PresetInfo {
+  name: string
+  label: string
+  detail: string
 }
 
 /** 保存候选表时提交的一行；`service` 为空时用 `provider` + `base_url`。 */
@@ -115,6 +157,9 @@ export interface ModelDraft {
   model: string
   /** `null` / 省略表示沿用原文件里的 key。 */
   api_key?: string | null
+  /** 预算口径；省略表示「不写进配置」，按模型能力或默认值走。 */
+  context_window?: number
+  max_output_tokens?: number
 }
 
 export interface Snapshot {
@@ -188,6 +233,7 @@ export type ClientCommand =
   | { type: 'model/select'; id: string }
   | { type: 'settings/get' }
   | { type: 'settings/save'; models: ModelDraft[] }
+  | { type: 'settings/preset'; preset: string }
   | { type: 'interaction/answer'; id: string; ok: boolean }
   | { type: 'fs/list'; path: string }
   | { type: 'fs/read'; path: string }

@@ -120,12 +120,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Mapping
 from typing import Any
 
 import httpx
 
-from ..base import ModelSpec, Request, ToolSpec
+from ..base import expand_headers, ModelSpec, Request, ToolSpec
 from ..stream_assembler import StreamAssembler
 from ..transport import TransportFailure, post_sse
 from ..types import (
@@ -297,9 +297,12 @@ class OpenAIResponsesProvider:
         spec: ModelSpec,
         api_key: str = "",
         client: httpx.AsyncClient | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         self.spec = spec
         self.api_key = api_key
+        # 配置里的自定义请求头；`{run}` 在这里展开成实例级随机 id
+        self._extra_headers = expand_headers(headers)
         # 注入的 client 由调用方关闭；None 时 post_sse 每次自建并 aclose（D29）
         self._client = client
 
@@ -314,103 +317,107 @@ class OpenAIResponsesProvider:
         refusal_open = False
 
         try:
-            async for event in post_sse(
+            events = post_sse(
                 self._url(),
                 headers=self._headers(),
                 payload=build_payload(request, self.spec),
                 client=self._client,
-            ):
-                if isinstance(event, TransportFailure):
-                    # 先把已攒下的调用补出来，partial 里至少能看到调用了什么
-                    for _event in replay_function_calls(assembler, pending):
-                        yield _event
-                    for _event in assembler.fail("error", event.message):
-                        yield _event
-                    return
-
-                kind = event.event
-                if kind is None:
-                    continue
-
-                data = json.loads(event.data)
-
-                if kind == "response.output_item.added":
-                    item = data.get("item") or {}
-                    if item.get("type") == "function_call":
-                        collect_item(pending, item)
-
-                elif kind == "response.content_part.added":
-                    part = data.get("part") or {}
-                    if part.get("type") == "output_text":
-                        for _event in assembler.start_text():
+            )
+            try:
+                async for event in events:
+                    if isinstance(event, TransportFailure):
+                        # 先把已攒下的调用补出来，partial 里至少能看到调用了什么
+                        for _event in replay_function_calls(assembler, pending):
                             yield _event
-                    elif part.get("type") == "refusal":
-                        saw_refusal = True
-
-                elif kind == "response.output_text.delta":
-                    if delta := data.get("delta"):
-                        for _event in assembler.text(delta):
+                        for _event in assembler.fail("error", event.message):
                             yield _event
+                        return
 
-                elif kind in (
-                    "response.reasoning_summary_text.delta",
-                    "response.reasoning_text.delta",
-                ):
-                    if delta := data.get("delta"):
-                        for _event in assembler.thinking(delta):
-                            yield _event
+                    kind = event.event
+                    if kind is None:
+                        continue
 
-                elif kind == "response.refusal.delta":
-                    if delta := data.get("delta"):
-                        saw_refusal = True
-                        # 拒答要单独成块：先关掉可能还在长的正文块
-                        if not refusal_open:
-                            for _event in assembler.end_text():
+                    data = json.loads(event.data)
+
+                    if kind == "response.output_item.added":
+                        item = data.get("item") or {}
+                        if item.get("type") == "function_call":
+                            collect_item(pending, item)
+
+                    elif kind == "response.content_part.added":
+                        part = data.get("part") or {}
+                        if part.get("type") == "output_text":
+                            for _event in assembler.start_text():
                                 yield _event
-                            for _event in assembler.start_text(refusal=True):
+                        elif part.get("type") == "refusal":
+                            saw_refusal = True
+
+                    elif kind == "response.output_text.delta":
+                        if delta := data.get("delta"):
+                            for _event in assembler.text(delta):
                                 yield _event
-                            refusal_open = True
-                        for _event in assembler.text(delta):
+
+                    elif kind in (
+                        "response.reasoning_summary_text.delta",
+                        "response.reasoning_text.delta",
+                    ):
+                        if delta := data.get("delta"):
+                            for _event in assembler.thinking(delta):
+                                yield _event
+
+                    elif kind == "response.refusal.delta":
+                        if delta := data.get("delta"):
+                            saw_refusal = True
+                            # 拒答要单独成块：先关掉可能还在长的正文块
+                            if not refusal_open:
+                                for _event in assembler.end_text():
+                                    yield _event
+                                for _event in assembler.start_text(refusal=True):
+                                    yield _event
+                                refusal_open = True
+                            for _event in assembler.text(delta):
+                                yield _event
+
+                    elif kind == "response.content_part.done":
+                        for _event in assembler.end_text():
                             yield _event
+                        refusal_open = False
 
-                elif kind == "response.content_part.done":
-                    for _event in assembler.end_text():
-                        yield _event
-                    refusal_open = False
+                    elif kind == "response.function_call_arguments.delta":
+                        if delta := data.get("delta"):
+                            slot_for(pending, data.get("item_id", ""))["args"] += delta
 
-                elif kind == "response.function_call_arguments.delta":
-                    if delta := data.get("delta"):
-                        slot_for(pending, data.get("item_id", ""))["args"] += delta
+                    elif kind == "response.function_call_arguments.done":
+                        # 上游在这一步给出完整且已校验的 JSON，比逐片拼接可靠
+                        if arguments := data.get("arguments"):
+                            slot_for(pending, data.get("item_id", ""))["args"] = arguments
 
-                elif kind == "response.function_call_arguments.done":
-                    # 上游在这一步给出完整且已校验的 JSON，比逐片拼接可靠
-                    if arguments := data.get("arguments"):
-                        slot_for(pending, data.get("item_id", ""))["args"] = arguments
+                    elif kind == "response.output_item.done":
+                        item = data.get("item") or {}
+                        if item.get("type") == "function_call":
+                            collect_item(pending, item)
+                        elif item.get("type") == "reasoning":
+                            # encrypted_content 是回传给厂商续推理用的，这里先存进 signature
+                            for _event in assembler.end_thinking(item.get("encrypted_content")):
+                                yield _event
 
-                elif kind == "response.output_item.done":
-                    item = data.get("item") or {}
-                    if item.get("type") == "function_call":
-                        collect_item(pending, item)
-                    elif item.get("type") == "reasoning":
-                        # encrypted_content 是回传给厂商续推理用的，这里先存进 signature
-                        for _event in assembler.end_thinking(item.get("encrypted_content")):
+                    elif kind in ("response.completed", "response.incomplete"):
+                        response = data.get("response") or {}
+                        if usage := response.get("usage"):
+                            assembler.add_usage(parse_usage(usage))
+                        if response.get("status") == "incomplete":
+                            reason = (response.get("incomplete_details") or {}).get("reason")
+                            stop_reason = "length" if reason == "max_output_tokens" else "filtered"
+
+                    elif kind in ("response.failed", "error"):
+                        for _event in replay_function_calls(assembler, pending):
                             yield _event
+                        for _event in assembler.fail("error", extract_error(data)):
+                            yield _event
+                        return
 
-                elif kind in ("response.completed", "response.incomplete"):
-                    response = data.get("response") or {}
-                    if usage := response.get("usage"):
-                        assembler.add_usage(parse_usage(usage))
-                    if response.get("status") == "incomplete":
-                        reason = (response.get("incomplete_details") or {}).get("reason")
-                        stop_reason = "length" if reason == "max_output_tokens" else "filtered"
-
-                elif kind in ("response.failed", "error"):
-                    for _event in replay_function_calls(assembler, pending):
-                        yield _event
-                    for _event in assembler.fail("error", extract_error(data)):
-                        yield _event
-                    return
-
+            finally:
+                await events.aclose()
             # 工具调用攒到最后再发：assembler 同一时刻只能开一个块，而并行调用
             # 的参数事件会交错；参数本来也要拼完才能用，提前发 start 没有价值。
             for _event in replay_function_calls(assembler, pending):
@@ -445,4 +452,5 @@ class OpenAIResponsesProvider:
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        headers.update(self._extra_headers)
         return headers

@@ -9,7 +9,7 @@ from gradus.agent.base import LoopConfig
 from gradus.ai.base import ToolSpec
 from gradus.coding import session
 from gradus.coding.registry import FunctionTool
-from gradus.coding.tools.tool_search import ToolSearchTool
+from gradus.coding.tools.tool_search import ToolSearchTool, tokenize
 
 
 def _tool(name: str, description: str = "") -> FunctionTool:
@@ -34,6 +34,62 @@ class ToolSearchTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.content.startswith("mcp__github__search_code"))
         self.assertNotIn("mcp__docs__read", result.content)
 
+    async def test_chinese_query_reaches_english_metadata(self):
+        """中文没有空格：靠 2-gram + 同义词表落到英文工具名上，不能整句当 token。"""
+        pool = [
+            _tool("complete_task", "Mark a task as completed and unblock dependents"),
+            _tool("spawn_agent", "Spawn a sub-agent to run one node"),
+        ]
+        search = ToolSearchTool(pool)
+
+        result = await search.execute("c1", {"query": "标记任务完成"})
+
+        self.assertTrue(result.content.startswith("complete_task"), result.content)
+
+    async def test_query_with_underscore_matches_snake_case_name(self):
+        pool = [_tool("list_agents", "List running agents")]
+        search = ToolSearchTool(pool)
+
+        result = await search.execute("c1", {"query": "list agents"})
+
+        self.assertTrue(result.content.startswith("list_agents"), result.content)
+
+    async def test_parameter_names_are_searchable(self):
+        """schema 里的字段名也算检索文本（Pi 的做法）：按 task_id 能搜到相关工具。"""
+        pool = [
+            FunctionTool(
+                spec=ToolSpec(
+                    name="claim_task",
+                    description="Claim a task",
+                    parameters={
+                        "type": "object",
+                        "properties": {"task_id": {"type": "string", "description": "任务编号"}},
+                    },
+                ),
+                handler=lambda arguments: "ok",
+            ),
+            _tool("close_agent", "Close an agent"),
+        ]
+        search = ToolSearchTool(pool)
+
+        result = await search.execute("c1", {"query": "task_id"})
+
+        self.assertTrue(result.content.startswith("claim_task"), result.content)
+
+    async def test_unrelated_query_finds_nothing(self):
+        search = ToolSearchTool([_tool("complete_task", "Mark a task as completed")])
+
+        result = await search.execute("c1", {"query": "天气怎么样"})
+
+        self.assertIn("没有匹配到", result.content)
+        self.assertEqual(search.take_pending(), [])
+
+    async def test_tokenize_splits_snake_case_and_chinese(self):
+        self.assertEqual(tokenize("complete_task"), ["complete", "task"])
+        self.assertIn("task", tokenize("标记任务完成"))
+        self.assertIn("complete", tokenize("标记任务完成"))
+        self.assertIn("issue", tokenize("issues"))
+
     async def test_limit_caps_results(self):
         pool = [_tool(f"tool_{index}", "match me") for index in range(5)]
         search = ToolSearchTool(pool)
@@ -43,12 +99,55 @@ class ToolSearchTest(unittest.IsolatedAsyncioTestCase):
         names = [line.split(":")[0] for line in result.content.splitlines() if ":" in line]
         self.assertEqual(len([name for name in names if name.startswith("tool_")]), 2)
 
-    async def test_no_matches(self):
-        search = ToolSearchTool([_tool("a", "alpha")])
+    async def test_no_matches_lists_the_index_without_loading(self):
+        """零命中不能只说「没找到」：给目录，让模型按名加载。"""
+        search = ToolSearchTool([_tool("a", "alpha"), _tool("b", "beta")])
 
         result = await search.execute("c1", {"query": "zzz"})
 
-        self.assertEqual(result.content, "(no matching tools)")
+        self.assertIn("可加载的工具（2 个）", result.content)
+        self.assertIn("- a: alpha", result.content)
+        self.assertIn('load=["名字"]', result.content)
+        # 只是列目录，不能顺手把工具加载进来
+        self.assertEqual(search.take_pending(), [])
+
+    async def test_load_by_name_bypasses_search(self):
+        """按名加载不看语言也不看分词：名字是稳定标识。"""
+        pool = [_tool("complete_task", "Mark a task as completed"), _tool("spawn_agent", "Spawn")]
+        search = ToolSearchTool(pool)
+
+        result = await search.execute("c1", {"load": ["complete_task"]})
+
+        self.assertTrue(result.content.startswith("complete_task"), result.content)
+        self.assertEqual([tool.spec.name for tool in search.take_pending()], ["complete_task"])
+
+    async def test_load_reports_unknown_names(self):
+        search = ToolSearchTool([_tool("complete_task", "Mark a task as completed")])
+
+        result = await search.execute("c1", {"load": ["nope"]})
+
+        self.assertIn("没有这些按需工具", result.content)
+        self.assertIn("nope", result.content)
+        self.assertEqual(search.take_pending(), [])
+
+    async def test_load_and_query_combine(self):
+        pool = [_tool("complete_task", "Mark a task as completed"), _tool("spawn_agent", "Spawn one")]
+        search = ToolSearchTool(pool)
+
+        await search.execute("c1", {"load": ["spawn_agent"], "query": "complete task"})
+
+        names = {tool.spec.name for tool in search.take_pending()}
+        self.assertEqual(names, {"spawn_agent", "complete_task"})
+
+    async def test_index_is_capped_for_big_pools(self):
+        pool = [_tool(f"tool_{index}", "does something") for index in range(40)]
+        search = ToolSearchTool(pool)
+
+        result = await search.execute("c1", {"query": "zzz"})
+
+        self.assertIn("可加载的工具（40 个）", result.content)
+        self.assertIn("先列前 30 个", result.content)
+        self.assertEqual(result.content.count("\n- "), 30)
 
     async def test_empty_query(self):
         search = ToolSearchTool([_tool("a", "alpha")])

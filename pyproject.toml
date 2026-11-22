@@ -29,5 +29,5 @@ include = ["gradus*"]
 dev = ["pytest>=8.3"]
 
 [tool.pytest.ini_options]
-testpaths = ["gradus/ai/tests", "gradus/agent/tests", "gradus/coding/tests", "gradus/host/tests"]
+testpaths = ["gradus/ai/tests", "gradus/agent/tests", "gradus/coding/tests", "gradus/host/tests", "bench/tests"]
 pythonpath = ["."]

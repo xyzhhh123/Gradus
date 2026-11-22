@@ -43,6 +43,8 @@ from gradus.agent.types import (
 )
 from gradus.ai.types import (
     AssistantMessage,
+    StreamDone,
+    StreamError,
     TextBlock,
     ToolResultMessage,
     UserMessage,
@@ -512,6 +514,77 @@ class AgentLoopTest(unittest.IsolatedAsyncioTestCase):
             error.usage,
             Usage(input_tokens=7, output_tokens=3),
         )
+
+
+class _TrackingStream:
+    """可跟踪的异步迭代器：`break` / 提前返回时是否被 aclose 一目了然。
+
+    不能用异步生成器做断言对象——`break` 之后它会被引用计数立刻回收，
+    `finally` 碰巧跑掉，测试就分不出「显式关闭」和「碰巧被 GC」。
+    """
+
+    def __init__(self, items: list[Any]) -> None:
+        self._items = list(items)
+        self.closed = False
+
+    def __aiter__(self) -> "_TrackingStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if not self._items:
+            raise StopAsyncIteration
+        return self._items.pop(0)
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class _TrackingProvider:
+    def __init__(self, items: list[Any]) -> None:
+        self._items = list(items)
+        self.streams: list[_TrackingStream] = []
+
+    def stream(self, request):
+        stream = _TrackingStream(self._items)
+        self.streams.append(stream)
+        return stream
+
+
+class ProviderStreamCloseTest(unittest.IsolatedAsyncioTestCase):
+    """提前返回与正常结束都要关闭 provider 的流，别留给 GC。"""
+
+    async def test_stream_closes_on_stream_error(self):
+        from gradus.ai.types import StreamError
+
+        provider = _TrackingProvider(
+            [
+                StreamError(
+                    kind="provider",
+                    error_message="boom",
+                    partial=AssistantMessage(content=[]),
+                )
+            ]
+        )
+
+        events = await collect(provider, [], messages=[UserMessage("hi")])
+
+        self.assertEqual(names_of(events)[-1], "AgentError")
+        self.assertTrue(provider.streams[0].closed, "StreamError 之后 provider 流没关")
+
+    async def test_stream_closes_on_normal_end(self):
+        provider = _TrackingProvider(
+            [
+                StreamDone(
+                    stop_reason="stop",
+                    message=AssistantMessage(content=[TextBlock("ok")]),
+                    usage=Usage(input_tokens=1, output_tokens=1),
+                )
+            ]
+        )
+
+        await collect(provider, [], messages=[UserMessage("hi")])
+
+        self.assertTrue(provider.streams[0].closed, "正常结束后 provider 流没关")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import os
+import secrets
 import shutil
 import sys
 import tempfile
@@ -45,7 +46,7 @@ DEFAULT_MEMORY = "2g"
 DEFAULT_CPUS = "2"
 DEFAULT_PIDS = "512"
 
-BACKENDS = ("local", "docker", "appcontainer", "restricted")
+BACKENDS = ("local", "docker", "appcontainer", "restricted", "exec")
 
 CONTAINER_WORKSPACE = "/workspace"
 CONTAINER_TMP = "/gradus-tmp"
@@ -385,12 +386,40 @@ TEMP_DIR_MAX_AGE = 7 * 24 * 60 * 60
 
 def create_scratch(prefix: str) -> Path:
     """建会话 scratch 目录并写下 owner pid。"""
-    path = Path(tempfile.mkdtemp(prefix=prefix))
+    path = _private_dir(prefix)
     try:
         (path / SCRATCH_MARKER).write_text(str(os.getpid()), encoding="utf-8")
     except OSError:
         pass
     return path
+
+
+def _private_dir(prefix: str) -> Path:
+    """在临时目录下建一个只有自己可用的目录。
+
+    Windows 上**不能用 `tempfile.mkdtemp`**：它建出来的目录是「受保护 DACL」
+    （SDDL 带 `D:P`，只授 OWNER RIGHTS / SYSTEM / Administrators）。沙箱子进程
+    是 LUA 过滤令牌，`OWNER RIGHTS` 在这个令牌下匹配不上，于是它读不到 scratch
+    里的脚本——`codemode` 就是这么坏的（`script exited without a result`）。
+    普通 `mkdir` 继承临时目录的 ACE，读就正常。
+
+    代价是目录继承了临时目录的权限：在用户自己的 `%TEMP%` 下仍然只有本人、
+    SYSTEM 与管理员能进，和 `mkdtemp` 的实际效果一致。
+
+    POSIX 上保持 `mkdtemp` 的 0700 语义，别把 `/tmp` 里的目录放宽。
+    """
+    if os.name != "nt":
+        return Path(tempfile.mkdtemp(prefix=prefix))
+
+    base = Path(tempfile.gettempdir())
+    base.mkdir(parents=True, exist_ok=True)
+    while True:
+        path = base / f"{prefix}{secrets.token_hex(6)}"
+        try:
+            path.mkdir()
+        except FileExistsError:
+            continue
+        return path
 
 
 def cleanup_temp(

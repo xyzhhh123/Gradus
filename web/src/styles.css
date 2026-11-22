@@ -1439,6 +1439,8 @@ button:disabled {
   display: grid;
   place-items: center;
   background: var(--backdrop-strong);
+  /* 底下的空状态建议胶囊会从面板边缘露出一角，糊一下才不像渲染错位 */
+  backdrop-filter: blur(3px);
 }
 
 .dialog {
@@ -1812,10 +1814,11 @@ button:disabled {
 /* ---------- 设置页 ---------- */
 
 .settings {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: min(720px, 92vw);
-  max-height: min(680px, 88vh);
+  max-height: min(880px, 94vh);
   border: 1px solid var(--border-2);
   border-radius: 14px;
   background: var(--bg-layer-1);
@@ -1828,6 +1831,8 @@ button:disabled {
   min-height: 0;
   padding: 4px 16px 16px;
   overflow-y: auto;
+  /* 留出滚动条位置：出/不出滚动条时内容宽度不跳 */
+  scrollbar-gutter: stable;
 }
 
 .settings-section {
@@ -2018,4 +2023,83 @@ button:disabled {
   .approval {
     width: calc(100% - 32px);
   }
+}
+
+/* 预算相关的三小块：两个窄输入 + 能力上限提示 + 预设下拉 */
+.settings-limit {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-preset {
+  flex: 0 0 auto;
+  min-width: 168px;
+  font-family: var(--font-text);
+}
+
+.settings-preset-hint {
+  flex: 1;
+  margin: 0;
+}
+
+.settings-budget {
+  flex: 1;
+  font-family: var(--font-code);
+  font-size: var(--fs-11_5);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 面板底部渐隐：内容还有一截在下面时给个视觉提示（滚动条在 Windows 上是悬浮式的） */
+.settings::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 28px;
+  background: linear-gradient(to bottom, transparent, var(--bg-layer-1));
+  pointer-events: none;
+}
+/* 带前缀标签的输入框（窗口 / 输出），标签比输入框窄，别抢宽度 */
+.settings-field {
+  display: flex;
+  flex: 0 0 27%;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-field > span {
+  flex: none;
+  font-size: var(--fs-11_5);
+  color: var(--text-3);
+}
+
+/* 「已存 key」这类状态标记：只占一小块，不参与拉伸 */
+.settings-badge {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* 设置面板页脚：路径 + 当前模型一行，太长就省略 */
+.settings-footer {
+  margin: 10px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-footer code {
+  font-family: var(--font-code);
+  font-size: var(--fs-11);
+}
+
+.settings-footer-sep {
+  margin: 0 6px;
+  opacity: 0.5;
 }

@@ -24,6 +24,7 @@ from ...agent.types import ToolResult
 from ...ai.base import ToolSpec
 from ..permissions import Confirm, Policy, sanitize_result
 from ..sandbox import HARNESS_PATH, Environment, LocalEnvironment, SandboxError
+from .spill import with_pointer
 
 DEFAULT_TIMEOUT = 120.0
 MAX_TIMEOUT = 600.0
@@ -71,6 +72,7 @@ class CodemodeTool:
         policy: Policy,
         confirm: Confirm | None,
         env: Environment | None = None,
+        output_chars: int | None = None,
     ) -> None:
         self._tools = {
             tool.spec.name: tool
@@ -80,6 +82,7 @@ class CodemodeTool:
         self._policy = policy
         self._confirm = confirm
         self._env = env or LocalEnvironment(Path.cwd())
+        self._output_chars = output_chars or MAX_OUTPUT_CHARS
 
     async def execute(
         self,
@@ -169,7 +172,7 @@ class CodemodeTool:
                     process.stdin.write((json.dumps(reply, ensure_ascii=False) + "\n").encode())
                     await process.stdin.drain()
                 elif kind == "done":
-                    return ToolResult(_render(message))
+                    return ToolResult(_render(message, self._output_chars))
                 elif kind == "error":
                     return ToolResult(str(message.get("message") or "script error"), is_error=True)
         finally:
@@ -206,17 +209,15 @@ async def _drain(stream: Any) -> str:
     return data.decode("utf-8", errors="replace")
 
 
-def _render(message: dict[str, Any]) -> str:
+def _render(message: dict[str, Any], limit: int) -> str:
     parts = [str(item) for item in message.get("outputs") or []]
     returned = message.get("returned")
     if returned is not None:
         parts.append(str(returned))
 
     text = "\n".join(parts) if parts else "(no output)"
-    if len(text) > MAX_OUTPUT_CHARS:
-        removed = len(text) - MAX_OUTPUT_CHARS
-        text = f"{text[:MAX_OUTPUT_CHARS]}\n…{removed} chars truncated…"
-    return text
+    # 超限先落盘、再给指针：截断掉的部分就再也拿不回来了。
+    return with_pointer(text, limit, hint="codemode")
 
 
 def _timeout(value: Any) -> float:
@@ -230,5 +231,6 @@ def create_codemode_tool(
     policy: Policy,
     confirm: Confirm | None,
     env: Environment | None = None,
+    output_chars: int | None = None,
 ) -> CodemodeTool:
-    return CodemodeTool(tools, policy, confirm, env)
+    return CodemodeTool(tools, policy, confirm, env, output_chars)

@@ -62,10 +62,33 @@ class ShellToolTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(started.is_error)
         self.assertIn("Cannot start", started.content)
 
-    async def test_long_output_is_truncated(self):
+    async def test_long_output_spills_to_file_with_pointer(self):
         result = await self.tool.execute("c1", {"command": "print('x' * 40000)"})
 
-        self.assertIn("chars truncated", result.content)
+        # 超限不再硬截断：完整内容落盘，上下文里换成指针 + 预览。
+        self.assertIn("已存到", result.content)
+        self.assertIn("read_file", result.content)
+        self.assertLess(len(result.content), 5_000)
+
+    async def test_output_cap_is_configurable(self):
+        tool = ShellTool(
+            self.root, sys.executable, ("-c",), BASH_SPEC, output_chars=100
+        )
+
+        result = await tool.execute("c1", {"command": "print('x' * 400)"})
+
+        # 100 字符就落盘，说明上限来自构造参数而不是模块常量。
+        self.assertIn("已存到", result.content)
+
+    async def test_output_cap_above_length_keeps_text_inline(self):
+        tool = ShellTool(
+            self.root, sys.executable, ("-c",), BASH_SPEC, output_chars=10_000
+        )
+
+        result = await tool.execute("c1", {"command": "print('x' * 400)"})
+
+        self.assertNotIn("已存到", result.content)
+        self.assertIn("x" * 400, result.content)
 
 
 class CreateShellToolsTest(unittest.TestCase):
@@ -114,3 +137,15 @@ class CreateShellToolsTest(unittest.TestCase):
             names = [tool.spec.name for tool in create_shell_tools(".")]
 
         self.assertEqual(names, ["bash"])
+
+    def test_output_cap_reaches_every_tool(self):
+        def which(name: str) -> str | None:
+            return {"bash": "/bin/bash", "pwsh": "/bin/pwsh"}.get(name)
+
+        with (
+            patch.object(shell.platform, "system", lambda: "Windows"),
+            patch.object(shell.shutil, "which", which),
+        ):
+            tools = create_shell_tools(".", output_chars=777)
+
+        self.assertEqual([tool._output_chars for tool in tools], [777, 777])

@@ -208,53 +208,60 @@ async def _run_loop_events(
         turn_usage = Usage()
 
         stream = provider.stream(request)
-        while True:
-            try:
-                event = await anext(stream)
-            except StopAsyncIteration:
-                break
-            except Exception as exc:
-                # provider 违约抛异常：编码成 AgentError。
-                # CancelledError 是 BaseException，不会走到这里。
+        try:
+            while True:
+                try:
+                    event = await anext(stream)
+                except StopAsyncIteration:
+                    break
+                except Exception as exc:
+                    # provider 违约抛异常：编码成 AgentError。
+                    # CancelledError 是 BaseException，不会走到这里。
+                    yield AgentError(
+                        kind="provider",
+                        message=f"{type(exc).__name__}: {exc}",
+                        partial=None,
+                        new_messages=new_messages,
+                        usage=total_usage,
+                    )
+                    return
+
+                yield event
+
+                if isinstance(event, StreamDone):
+                    assistant = event.message
+                    stop_reason = event.stop_reason
+                    turn_usage = event.usage
+                    total_usage = total_usage + event.usage
+
+                elif isinstance(event, StreamError):
+                    # 失败那一轮不计入 new_messages，半成品只放在 partial 里
+                    if event.partial.usage is not None:
+                        total_usage = total_usage + event.partial.usage
+                    yield AgentError(
+                        kind="aborted" if event.kind == "aborted" else "provider",
+                        message=event.error_message,
+                        partial=event.partial,
+                        new_messages=new_messages,
+                        usage=total_usage,
+                    )
+                    return
+
+            if assistant is None:
                 yield AgentError(
                     kind="provider",
-                    message=f"{type(exc).__name__}: {exc}",
+                    message="stream ended without StreamDone",
                     partial=None,
                     new_messages=new_messages,
                     usage=total_usage,
                 )
                 return
-
-            yield event
-
-            if isinstance(event, StreamDone):
-                assistant = event.message
-                stop_reason = event.stop_reason
-                turn_usage = event.usage
-                total_usage = total_usage + event.usage
-
-            elif isinstance(event, StreamError):
-                # 失败那一轮不计入 new_messages，半成品只放在 partial 里
-                if event.partial.usage is not None:
-                    total_usage = total_usage + event.partial.usage
-                yield AgentError(
-                    kind="aborted" if event.kind == "aborted" else "provider",
-                    message=event.error_message,
-                    partial=event.partial,
-                    new_messages=new_messages,
-                    usage=total_usage,
-                )
-                return
-
-        if assistant is None:
-            yield AgentError(
-                kind="provider",
-                message="stream ended without StreamDone",
-                partial=None,
-                new_messages=new_messages,
-                usage=total_usage,
-            )
-            return
+        finally:
+            # 迭代器不一定有 aclose（测试里的手写迭代器就没有）；有就关掉，
+            # 别把 provider 的流留给 GC。
+            close_async = getattr(stream, "aclose", None)
+            if close_async is not None:
+                await close_async()
 
         calls = [
             block for block in assistant.content if isinstance(block, ToolCallBlock)

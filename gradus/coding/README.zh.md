@@ -81,6 +81,7 @@ gradus/coding/
 ├── session.py          # 会话装配与 JSONL 历史
 ├── context.py          # token 预算、压缩切点与摘要
 ├── retry.py            # 运行级重试策略（同模型）
+├── retrieval.py        # 分词与 BM25（tool_search / recall_history 共用）
 ├── registry.py         # 工具注册表与函数工具适配
 ├── mcp.py              # MCP server -> AgentTool
 ├── render.py           # 事件渲染：展示、日志
@@ -92,12 +93,22 @@ gradus/coding/
 ├── workspace.py        # 沙箱自有 workspace 副本与合回宿主
 ├── cli.py              # 命令行入口
 ├── tools/
-│   ├── files.py        # read_file / write_file / edit / list_dir
+│   ├── files.py        # read_file / write_file / edit / delete_file
 │   ├── search.py       # grep / glob
-│   └── shell.py        # bash / powershell
+│   ├── shell.py        # bash / powershell
+│   ├── skill.py        # use_skill: 读技能正文（分片）
+│   └── recall_history.py  # recall_history 适配器
 ├── docs/
 │   ├── design.md       # 设计说明
-│   └── problem.md      # 已解决问题归档
+│   ├── problem.md      # 已解决问题归档
+│   ├── sandbox.md      # 沙箱：边界、机制、限制
+│   ├── sandbox_reference.md  # 六家 harness 的沙箱做法对比
+│   ├── changelog.md     # 按日期的变更记录
+│   ├── exec_environment.md  # 远程执行环境方案（exec 进别人的容器）
+│   ├── context_design.md   # 上下文管理：记录、视图、压缩
+│   ├── skill_reference.md  # 技能系统：六家 harness 调研
+│   ├── recall.md       # 召回：按 id / 关键词检索、选择器兜底
+│   └── ...             # 一个主题一份（多 agent、定时任务、后台命令等）
 └── tests/
 ```
 

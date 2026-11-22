@@ -1,7 +1,17 @@
-"""`tool_search`：按关键词从 deferred 工具里挑出要加载的工具。
+"""`tool_search`：按关键词或名字从 deferred 工具里挑出要加载的工具。
 
 只负责检索与登记，不执行选中的工具。真正把工具加进下一次请求由 `session.py`
 的 `prepare_next_turn` 钩子完成，所以加载只在本次运行内有效。
+
+检索形态照 Pi 的 `extensions/tool-search/tool.ts`：**BM25**、拆驼峰与下划线、
+去停用词、简单复数词干化、把参数 schema 里的字段名与描述也算进检索文档。
+分词与打分在 `coding/retrieval.py`（`recall` 共用）。
+
+两处偏离 Pi（见 `docs/design.md` §5.9）：
+
+1. 中文按 **2-gram** 切 + 小型双语同义词表——Pi 的分词器只认 `[a-z0-9]`；
+2. **零命中给出目录、`load` 按名加载**——检索猜不中时不该让模型以为「没有这个能力」。
+   目录只列名字与一句话，**不加载**；点名的才加载。
 """
 
 from __future__ import annotations
@@ -12,22 +22,34 @@ from typing import Any
 from ...agent.base import AgentTool, ToolUpdateCallback
 from ...agent.types import ToolResult
 from ...ai.base import ToolSpec
+from ..retrieval import bm25, tokenize
 
 DEFAULT_LIMIT = 8
+
+#: 零命中时最多列多少个工具。MCP 池子可能上百个，全列会把上下文撑爆。
+MAX_INDEX = 30
 
 TOOL_SEARCH_SPEC = ToolSpec(
     name="tool_search",
     description=(
-        "Search MCP tools that are not declared yet, and load the best matches for "
-        "your next call. Use this when you need a capability that is not currently "
-        "in the tool list. Results become callable on the next turn."
+        "Find tools that are not declared yet (MCP servers, task graph, sub-agents, "
+        "schedules) and load them for the next call. Give `query` to search, or `load` "
+        "with exact tool names. If the query matches nothing you get the full index — "
+        "then load by name."
     ),
     parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "What you want to do, in a few words",
+                "description": "What you want to do, in a few words (English works best)",
+            },
+            "load": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Exact tool names to load, bypassing search, e.g. [\"complete_task\"]"
+                ),
             },
             "limit": {
                 "type": "integer",
@@ -35,13 +57,74 @@ TOOL_SEARCH_SPEC = ToolSpec(
                 "description": f"Maximum tools to load (default: {DEFAULT_LIMIT})",
             },
         },
-        "required": ["query"],
     },
 )
 
 
+def _schema_text(schema: Any, parts: list[str]) -> None:
+    """参数 schema 里的字段名与描述也进检索文档（字段名常是关键词）。"""
+    if not isinstance(schema, dict):
+        return
+    description = schema.get("description")
+    if isinstance(description, str):
+        parts.append(description)
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for name, value in properties.items():
+            parts.append(str(name))
+            _schema_text(value, parts)
+    _schema_text(schema.get("items"), parts)
+    for key in ("anyOf", "oneOf", "allOf"):
+        variants = schema.get(key)
+        if isinstance(variants, list):
+            for variant in variants:
+                _schema_text(variant, parts)
+
+
+def _document(spec: ToolSpec) -> str:
+    parts = [spec.name, spec.name.replace("_", " "), spec.description]
+    _schema_text(spec.parameters, parts)
+    return " ".join(part for part in parts if part and part.strip())
+
+
+def _first_line(description: str, limit: int = 110) -> str:
+    """目录里每个工具只占一行：看得出是干什么的，又不至于占满上下文。"""
+    line = " ".join(description.split())
+    return line[:limit] + "…" if len(line) > limit else line
+
+
+def _rank(pool: Sequence[AgentTool], query: str) -> list[AgentTool]:
+    query_terms = tokenize(query)
+    if not query_terms:
+        return []
+
+    corpus = [tokenize(_document(tool.spec)) for tool in pool]
+    scores = bm25(query_terms, corpus)
+    ranked = [
+        (score, index, tool)
+        for index, (score, tool) in enumerate(zip(scores, pool))
+        if score > 0
+    ]
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [tool for _, _, tool in ranked]
+
+
+def _index_text(pool: Sequence[AgentTool]) -> str:
+    """零命中时的目录：名字 + 一句话，**不加载**任何工具。"""
+    shown = list(pool)[:MAX_INDEX]
+    header = f"没有匹配到。可加载的工具（{len(pool)} 个）"
+    if len(pool) > MAX_INDEX:
+        header += f"，先列前 {MAX_INDEX} 个；用更具体的英文词再搜"
+    lines = [f"{header}："]
+    lines.extend(
+        f"- {tool.spec.name}: {_first_line(tool.spec.description)}" for tool in shown
+    )
+    lines.append('用 tool_search(load=["名字"]) 加载其中一个；加载后下一轮就能调用。')
+    return "\n".join(lines)
+
+
 class ToolSearchTool:
-    """在 deferred 工具池里按关键词打分，登记命中的工具。"""
+    """在 deferred 工具池里按 BM25 挑工具；也可以按名直接加载。"""
 
     spec = TOOL_SEARCH_SPEC
     execution_mode = "parallel"
@@ -57,24 +140,54 @@ class ToolSearchTool:
         arguments: dict[str, Any],
         on_update: ToolUpdateCallback | None = None,
     ) -> ToolResult:
-        query = str(arguments.get("query", "")).strip()
-        if not query:
-            return ToolResult("query is required", is_error=True)
+        query = str(arguments.get("query") or "").strip()
+        raw_load = arguments.get("load")
+        if raw_load is not None and not isinstance(raw_load, list):
+            return ToolResult("load must be an array of tool names", is_error=True)
+        wanted = [str(item).strip() for item in raw_load or [] if str(item).strip()]
 
-        limit = max(1, int(arguments.get("limit") or DEFAULT_LIMIT))
-        matches = _rank(self._pool, query)[:limit]
+        if not query and not wanted:
+            return ToolResult("query or load is required", is_error=True)
 
-        if not matches:
-            return ToolResult("(no matching tools)")
+        try:
+            limit = max(1, int(arguments.get("limit") or DEFAULT_LIMIT))
+        except (TypeError, ValueError):
+            return ToolResult("limit must be an integer", is_error=True)
 
-        for tool in matches:
-            name = tool.spec.name
-            if name not in self._pending_names:
-                self._pending.append(tool)
-                self._pending_names.add(name)
+        by_name = {tool.spec.name: tool for tool in self._pool}
+        matches: list[AgentTool] = []
+        unknown: list[str] = []
+        for name in wanted:
+            tool = by_name.get(name)
+            if tool is None:
+                unknown.append(name)
+            elif tool not in matches:
+                matches.append(tool)
+
+        # 名字加载优先：它不经过分词，任何语言都能用。
+        if query:
+            for tool in _rank(self._pool, query):
+                if tool not in matches:
+                    matches.append(tool)
+        matches = matches[:limit]
+
+        if matches:
+            for tool in matches:
+                name = tool.spec.name
+                if name not in self._pending_names:
+                    self._pending.append(tool)
+                    self._pending_names.add(name)
 
         lines = [f"{tool.spec.name}: {tool.spec.description}" for tool in matches]
-        lines.append("These tools will be available on your next call.")
+        if matches:
+            lines.append("These tools will be available on your next call.")
+        if unknown:
+            lines.append(
+                f"没有这些按需工具：{', '.join(unknown)}（可能已经可用，或名字拼错）"
+            )
+        if not matches and not unknown:
+            # 零命中：列目录而不是「没找到」——绝不能让它以为「没有这个能力」。
+            return ToolResult(_index_text(self._pool))
         return ToolResult("\n".join(lines))
 
     def take_pending(self) -> list[AgentTool]:
@@ -82,23 +195,3 @@ class ToolSearchTool:
         pending, self._pending = self._pending, []
         self._pending_names.clear()
         return pending
-
-
-def _rank(pool: Sequence[AgentTool], query: str) -> list[AgentTool]:
-    tokens = [token for token in query.lower().split() if token]
-    scored: list[tuple[int, int, AgentTool]] = []
-
-    for index, tool in enumerate(pool):
-        name = tool.spec.name.lower()
-        description = tool.spec.description.lower()
-        score = 0
-        for token in tokens:
-            if token in name:
-                score += 3
-            if token in description:
-                score += 1
-        if score > 0:
-            scored.append((score, index, tool))
-
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    return [tool for _, _, tool in scored]

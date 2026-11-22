@@ -17,6 +17,7 @@ MODULES = (
     "gradus.ai.tests.test_anthropic",
     "gradus.ai.tests.test_fake",
     "gradus.ai.tests.test_gemini",
+    "gradus.ai.tests.test_models",
     "gradus.ai.tests.test_openai_compat",
     "gradus.ai.tests.test_openai_responses",
     "gradus.ai.tests.test_provider_factory",

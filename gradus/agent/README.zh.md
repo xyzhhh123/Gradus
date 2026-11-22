@@ -57,7 +57,7 @@ ai/       Provider、内部协议
 - `LoopConfig`：`system`、`tools`、`max_turns`、`max_output_tokens`、`temperature`、`reasoning`、`tool_timeout`、`hooks`、`get_steering_messages`、`get_follow_up_messages`
 - `AgentHooks`：`before_run` / `transform_messages` / `prepare_request` / `before_tool_call` / `after_tool_call` / `finish_turn` / `prepare_next_turn` / `before_finish` / `on_max_turns`，全部可选
 - `AgentError.kind`：`provider` / `aborted` / `max_turns` / `config`
-- `Agent.connect(spec, config, *, api_key="", client=None)` 与 `Agent.aclose()`：自建的连接池由 `aclose()` 关闭，注入的只借用不关闭。
+- `Agent.connect(spec, config, *, api_key="", client=None, headers=None)` 与 `Agent.aclose()`：自建的连接池由 `aclose()` 关闭，注入的只借用不关闭；`headers` 是配置里的自定义请求头（网关要求 org id / 会话 id 之类），原样转给 Provider。
 - 终止事件只有 `AgentDone` 和 `AgentError` 两个；`max_turns` 按模型请求次数计。
 
 字段、事件顺序与终止语义见 [docs/design.md](docs/design.md)。

@@ -36,13 +36,12 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 from collections.abc import Sequence
 from ctypes import wintypes
 from pathlib import Path
 from warnings import deprecated
 
-from .sandbox import Environment, SandboxError, _pid_alive, current_user
+from .sandbox import Environment, SandboxError, _pid_alive, create_scratch, current_user
 from .win32 import (
     CREATE_UNICODE_ENVIRONMENT,
     EXTENDED_STARTUPINFO_PRESENT,
@@ -176,7 +175,9 @@ class AppContainerEnvironment:
     def __init__(self, root: str | Path, *, python: str | None = None) -> None:
         self._root = Path(root).expanduser().resolve()
         self._python = python or sys.executable
-        self._scratch = Path(tempfile.mkdtemp(prefix="gradus-ac-"))
+        # 走 create_scratch 而不是 mkdtemp：Windows 上 mkdtemp 建出来的是受保护
+        # DACL 目录，沙箱子进程读不到里面的 harness 与脚本（见 sandbox._private_dir）。
+        self._scratch = create_scratch("gradus-ac-")
         self._profile = profile_name()
         self._sid: int | None = None
         self._sid_text: str | None = None

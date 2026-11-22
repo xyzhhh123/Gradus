@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from ..agent.types import TurnEnd
 from ..ai.envfile import load_env_file
 from .config import (
     ENV_BASE_URL,
@@ -104,13 +105,41 @@ async def confirm_tool(question: str) -> bool:
     return answer.strip().lower() in {"y", "yes"}
 
 
+def format_usage(usage: object) -> str:
+    """一轮的用量，压成一行：`in 4,211 · out 12 · cache 4,096`。"""
+    parts = [
+        f"in {getattr(usage, 'input_tokens', 0):,}",
+        f"out {getattr(usage, 'output_tokens', 0):,}",
+    ]
+    cached = getattr(usage, "cache_read_tokens", 0)
+    if cached:
+        total = getattr(usage, "input_tokens", 0) or 1
+        parts.append(f"cache {cached:,} ({cached / total:.0%})")
+    return " · ".join(parts)
+
+
+def format_totals(totals: dict[str, int]) -> str:
+    """会话累计：轮数、输入、输出、缓存命中率。"""
+    if not totals.get("turns"):
+        return "本会话还没有用量记录"
+    inputs = totals.get("input", 0) or 1
+    cached = totals.get("cacheRead", 0)
+    return (
+        f"会话累计：{totals['turns']} 轮 · in {inputs:,} · out {totals.get('output', 0):,} "
+        f"· cache {cached:,} ({cached / inputs:.0%})"
+    )
+
+
 async def run_once(
     session: Session,
     text: str,
     log_file: TextIO | None = None,
 ) -> None:
     """跑一轮，把事件流写到终端，需要留痕的事件写进日志。"""
+    last_usage = None
     async for event in session.prompt(text):
+        if isinstance(event, TurnEnd):
+            last_usage = event.usage
         chunk = render(event)
         if chunk:
             print(chunk, end="", flush=True)
@@ -120,6 +149,8 @@ async def run_once(
             log_file.write(line + "\n")
             log_file.flush()
     print()
+    if last_usage is not None:
+        print(f"[{format_usage(last_usage)}]")
 
 
 async def reload_session(session: Session) -> None:
@@ -153,6 +184,9 @@ async def interactive(session: Session, log_file: TextIO | None = None) -> None:
             return
         if text == "/reload":
             await reload_session(session)
+            continue
+        if text == "/usage":
+            print(format_totals(session.usage_totals))
             continue
 
         try:

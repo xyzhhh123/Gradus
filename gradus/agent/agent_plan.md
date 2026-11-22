@@ -67,6 +67,9 @@ coding/*  ->  agent/*  ->  ai/*
 - `tests/test_tools.py`：4 个用例，覆盖参数类型校验、超时、`duration_ms` 与超时下的取消传播。
 - `tests/test_boundary.py`：2 个用例，检查 import 边界、第三方白名单与 `types.py` 只依赖 `ai.types`。
 - `tests/test_client.py`：4 个用例，覆盖自建 client 被 `aclose()` 关闭、注入 client 跨两轮复用且不被 agent 关闭、关闭后拒绝新运行、构造失败不泄漏 client。
+- 追加（2026-11）：`Agent.connect(..., headers=None)` 把配置里的自定义请求头原样转给
+  `create_provider`——网关要求的 org id / 会话 id 由上层给，agent 不看、不改、也不按 host
+  判断；`{run}` 这类占位符在 ai 层构造 Provider 时展开。
 - `pyproject.toml`：`testpaths` 已包含 `gradus/agent/tests`；新增 `jsonschema` 依赖。
 - 所有模块 import 通过，无诊断错误。
 - `AG-01`～`AG-03`、`AG-04`（超时部分）、`AG-11`、`AG-13`、`AG-14`、`AG-15` 与 `AG-16` 已修复，归档见 `docs/problem.md`。

@@ -30,6 +30,10 @@ SERVICES: dict[str, tuple[ProviderName, str]] = {
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ),
     "siliconflow": ("openai_compat", "https://api.siliconflow.cn/v1"),
+    # OpenCode Go：订阅制编码模型网关。它要求每个请求带一个「会话 id」头，配置里写
+    # `"headers": {"x-opencode-session": "{run}"}`（`{run}` 由 `ai.base.expand_headers`
+    # 换成本次会话的随机 id）。按量计的 Zen 端点是另一个地址：opencode.ai/zen/v1。
+    "opencode-go": ("openai_compat", "https://opencode.ai/inference/go/v1"),
     # 火山方舟的 model 要填控制台里创建的接入点 ID
     "ark": ("openai_compat", "https://ark.cn-beijing.volces.com/api/v3"),
     # anthropic：Messages 形状
@@ -43,4 +47,14 @@ SERVICES: dict[str, tuple[ProviderName, str]] = {
     # openai_responses：Responses 形状
     "openai": ("openai_responses", "https://api.openai.com/v1"),
     "kimi-responses": ("openai_responses", "https://api.moonshot.cn/v1"),
+}
+
+#: 有些网关要求每个请求带特定请求头才肯路由，缺了直接 400。表里只登记「选了这项
+#: 就必须带」的头，**只对该服务生效**：没选这个 `service` 的会话一个头都不会多。
+#:
+#: 值里的 `{run}` 由 `base.expand_headers` 换成本次会话的随机 id。用户显式配的
+#: `headers` 覆盖这里的同名项（想自己指定会话 id 就自己写）。
+SERVICE_HEADERS: dict[str, dict[str, str]] = {
+    # OpenCode Go：缺 `x-opencode-session` 会回 400 MissingSessionID
+    "opencode-go": {"x-opencode-session": "{run}"},
 }

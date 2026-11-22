@@ -5,6 +5,26 @@ import { initialState } from './state'
 
 const frame = (type: string, payload: unknown): Frame => ({ seq: 1, type, payload })
 
+describe('usage/state', () => {
+  it('folds session totals into state', () => {
+    const frame = {
+      seq: 3,
+      type: 'usage/state',
+      payload: {
+        turns: 3,
+        inputTokens: 14146,
+        outputTokens: 142,
+        cacheReadTokens: 8192,
+        cacheWriteTokens: 0,
+      },
+    }
+
+    const next = reduce(initialState(), frame)
+
+    expect(next.usage).toEqual(frame.payload)
+  })
+})
+
 describe('reduce', () => {
   it('快照替换整份状态', () => {
     const state = reduce(

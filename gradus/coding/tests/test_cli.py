@@ -192,5 +192,38 @@ class UntrustTest(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(store.exists())
 
 
+class UsageFormatTest(unittest.TestCase):
+    """CLI 的用量出口：一行轮次、一行累计。"""
+
+    def test_turn_line_has_in_out_and_cache(self):
+        line = cli.format_usage(
+            Usage(input_tokens=4211, output_tokens=12, cache_read_tokens=4096)
+        )
+
+        self.assertIn("in 4,211", line)
+        self.assertIn("out 12", line)
+        self.assertIn("cache 4,096 (97%)", line)
+
+    def test_turn_line_skips_cache_when_zero(self):
+        line = cli.format_usage(Usage(input_tokens=10, output_tokens=1))
+
+        self.assertNotIn("cache", line)
+
+    def test_totals_line_reports_turns_and_ratio(self):
+        line = cli.format_totals(
+            {"turns": 3, "input": 14146, "output": 142, "cacheRead": 8192, "cacheWrite": 0}
+        )
+
+        self.assertIn("3 轮", line)
+        self.assertIn("cache 8,192 (58%)", line)
+
+    def test_totals_line_when_empty(self):
+        line = cli.format_totals(
+            {"turns": 0, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
+        )
+
+        self.assertIn("还没有用量记录", line)
+
+
 if __name__ == "__main__":
     unittest.main()

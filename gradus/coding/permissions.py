@@ -34,13 +34,32 @@ Confirm = Callable[[str], Awaitable[bool]]
 READ_TOOLS = frozenset(
     {
         "read_file",
-        "list_dir",
         "grep",
         "glob",
         "tool_search",
+        # 召回只读已压缩的历史，不产生任何副作用。
+        "recall_history",
+        "check_background",
         "list_mcp_resources",
         "list_mcp_resource_templates",
         "read_mcp_resource",
+        # 列任务与取消任务都只动任务表，不会立刻执行任何东西；新建任务走询问。
+        "manage_schedules",
+        # 六个任务图工具同样只动协作状态；真正干活发生在派活之后。
+        "create_task",
+        "update_task",
+        "list_tasks",
+        "get_task",
+        "claim_task",
+        "complete_task",
+        # 派活、等待、收尾与消息同样只动协作状态：真正的写操作发生在子 agent 自己
+        # 的会话里，那边仍按同一套策略逐次询问。
+        "spawn_agent",
+        "wait",
+        "list_agents",
+        "send_message",
+        "close_agent",
+        "interrupt_agent",
         # 脚本本身只是运行器；脚本内的写操作与命令由 codemode 逐次按本策略确认。
         "codemode",
     }

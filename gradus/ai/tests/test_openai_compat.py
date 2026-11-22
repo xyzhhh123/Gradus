@@ -193,14 +193,63 @@ def delta_chunk(delta: dict[str, Any], finish: str | None = None) -> str:
     return json_chunk({"choices": [{"index": 0, "delta": delta, "finish_reason": finish}]})
 
 
-async def run(chunks: list[str], api_key: str = "sk-test"):
+async def run(chunks: list[str], api_key: str = "sk-test", headers=None):
     """把剧本字符串喂给 stream()，逐条转发事件；patch 在迭代期间一直有效。"""
-    provider = OpenAIChatProvider(make_spec(), api_key=api_key)
+    provider = OpenAIChatProvider(make_spec(), api_key=api_key, headers=headers)
     events = [SseEvent(event=None, data=chunk) for chunk in chunks]
     with patch("gradus.ai.providers.openai_compat.post_sse") as fake:
         fake.return_value = fake_sse(events)
         async for event in provider.stream(Request(system="", messages=[UserMessage("hi")])):
             yield event
+
+
+class TestCustomHeaders(StreamTestCase):
+    """配置里的自定义请求头：并进每次请求，`{run}` 在一个实例内稳定。"""
+
+    async def _headers(self, headers) -> dict[str, str]:
+        provider = OpenAIChatProvider(make_spec(), api_key="sk-test", headers=headers)
+        seen: list[dict[str, str]] = []
+
+        def capture(*_args, **kwargs):
+            seen.append(kwargs["headers"])
+            return fake_sse([SseEvent(event=None, data="[DONE]")])
+
+        with patch("gradus.ai.providers.openai_compat.post_sse", capture):
+            for _ in range(2):
+                async for _event in provider.stream(
+                    Request(system="", messages=[UserMessage("hi")])
+                ):
+                    pass
+        return seen
+
+    async def test_extra_headers_are_sent(self):
+        seen = await self._headers({"x-org": "abc"})
+
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(seen[0]["x-org"], "abc")
+        # 自带头不能被挤掉
+        self.assertEqual(seen[0]["Authorization"], "Bearer sk-test")
+        self.assertEqual(seen[0]["Content-Type"], "application/json")
+
+    async def test_run_placeholder_is_stable_within_the_provider(self):
+        seen = await self._headers({"x-opencode-session": "{run}"})
+
+        first = seen[0]["x-opencode-session"]
+        self.assertNotIn("{run}", first)
+        self.assertEqual(first, seen[1]["x-opencode-session"])
+
+    async def test_run_placeholder_differs_between_providers(self):
+        one = await self._headers({"x-session": "{run}"})
+        two = await self._headers({"x-session": "{run}"})
+
+        self.assertNotEqual(one[0]["x-session"], two[0]["x-session"])
+
+    async def test_no_extra_headers_keeps_defaults(self):
+        seen = await self._headers(None)
+
+        self.assertEqual(
+            set(seen[0]), {"Content-Type", "Accept", "Authorization"}
+        )
 
 
 class TestStream(StreamTestCase):
@@ -483,6 +532,59 @@ class TestStream(StreamTestCase):
             _, kwargs = fake.call_args
 
         self.assertNotIn("Authorization", kwargs["headers"])
+
+
+class _TrackingStream:
+    """既是异步迭代器，也记录自己有没有被 aclose。
+
+    用生成器做不到确定性：`break` 之后它会被引用计数立刻回收，`finally` 跑掉了，
+    测试就分不出「显式关闭」和「碰巧被 GC」。
+    """
+
+    def __init__(self, items: list[Any]) -> None:
+        self._items = list(items)
+        self.closed = False
+
+    def __aiter__(self) -> "_TrackingStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if not self._items:
+            raise StopAsyncIteration
+        return self._items.pop(0)
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class EarlyStopClosesStreamTest(StreamTestCase):
+    """`[DONE]` 之后 provider 会 break；这时必须显式关掉 post_sse。
+
+    不关的话，那条 SSE 迭代器要等事件循环关闭才被 GC 收尾，触发
+    `RuntimeError: aclose(): asynchronous generator is already running`。
+    """
+
+    async def test_break_after_done_closes_post_sse(self):
+        stream = _TrackingStream(
+            [
+                SseEvent(
+                    event="", data='{"choices":[{"index":0,"delta":{"content":"hi"}}]}'
+                ),
+                SseEvent(event="", data="[DONE]"),
+                SseEvent(event="", data="never read"),
+            ]
+        )
+        provider = OpenAIChatProvider(make_spec(), api_key="k")
+
+        with patch(
+            "gradus.ai.providers.openai_compat.post_sse", lambda *a, **k: stream
+        ):
+            last = await self.consume(
+                provider.stream(Request(system="s", messages=[UserMessage("hi")]))
+            )
+
+        self.assertEqual(type(last).__name__, "StreamDone")
+        self.assertTrue(stream.closed, "post_sse 没有被调用方关闭")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,35 @@
+# 评测用的「agent 房间」：基于 SWE-bench 实例镜像，装一套 py3.13 给 Gradus。
+#
+#   BASE = swebench/sweb.eval.x86_64.<instance>
+#
+# 关键点：
+# - 仓库依赖已经在 `/opt/miniconda3/envs/testbed` 里，模型改完能 `conda run -n testbed pytest ...` 自测；
+# - Gradus 需要 >=3.13，用 uv 装一个独立 venv，不和仓库环境打架；
+# - **依赖用离线 wheel**：BuildKit 访问 files.pythonhosted.org 经常超时（实测 126s 重试 3 次后失败），
+#   而宿主机网络是通的，所以 wheel 在宿主上预下载、随构建上下文 COPY 进来。
+ARG BASE
+FROM ${BASE}
+
+USER root
+SHELL ["/bin/bash", "-lc"]
+
+# uv 用来造 3.13 环境（这个下载走 astral/github，构建时是通的）
+RUN if ! command -v uv >/dev/null 2>&1; then \
+        curl -LsSf https://astral.sh/uv/install.sh | sh; \
+    fi \
+ && ln -sf /root/.local/bin/uv /usr/local/bin/uv \
+ && uv --version
+
+# 预下载的 wheel：离线装依赖，绕开构建网络
+COPY wheels /wheels
+
+COPY . /gradus
+WORKDIR /gradus
+RUN uv venv /gradus-env --python 3.13 \
+ && uv pip install --python /gradus-env/bin/python --offline --find-links /wheels setuptools wheel \
+ && uv pip install --python /gradus-env/bin/python --offline --find-links /wheels \
+        --no-build-isolation -e /gradus \
+ && /gradus-env/bin/python -c "import gradus; print('gradus ok')"
+
+# 模型在这里改代码；仓库依赖通过 conda 环境 testbed 提供
+WORKDIR /testbed

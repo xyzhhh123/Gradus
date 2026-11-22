@@ -330,6 +330,7 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 - **关闭**：`aclose()` 先 `abort()` 再关自建的 client，重复调用幂等；关闭后 `prompt()` / `continue_()` / `reset()` 抛 `RuntimeError`。代码不做超时关闭、引用计数或 GC 兜底，判断交给调用方：CLI 在进程退出时、服务端在会话销毁时（不是每次请求结束）、测试在用例结束时。
 - 三种层级不要混：一次模型请求是一轮（`StreamDone` / `StreamError` 结束）；一次 `prompt()` 是一次运行（`AgentDone` / `AgentError` 结束）；Agent 生命周期从 `connect()` 到 `aclose()`。连接池跨多次运行存在，**不随 `AgentDone` 关闭**。
 - `client=None` 时自建并拥有，`aclose()` 关闭；传入时只借用，由创建者关闭——同一个池子可以给多个 Agent / Provider 共用。
+- `headers=None` 是配置里的自定义请求头（网关要求的 org id / 会话 id 之类），`connect()` 原样转给 `create_provider`，agent 自己不看、不改、也不按 host 判断。`{run}` 这类占位符由 ai 层在构造 Provider 时展开，agent 不参与。
 - 直接用 `Agent(provider, config)` 时不经过 `connect()`，池子走 ai 层默认行为：每次 `stream()` 自建并在结束时关闭，没有跨轮复用。
 
 多用户与共享：
@@ -347,6 +348,8 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 - `mode="all"` 一次取走全部；`mode="one-at-a-time"` 一次只取最早一条；
 - 队列本身不区分 steer / follow-up，两个实例由 `Agent` 在每次运行时新建并持有；
 - 队列生命周期等于单次运行：运行结束即丢弃，没被 drain 的消息不会泄漏到下一次运行；
+- `Agent.notify(text)` 往 steering 队列注入非用户来源的消息（`UserMessage(origin="harness")`，例如后台命令完成通知）。它与 `steer` 的唯一区别是空闲时静默丢弃、不抛异常——通知的到达时机不由调用方决定，没有可返回错误的调用栈；排队与 drain 点完全复用 steering，因此同样受「单次运行」约束；
+- `prompt(text, origin="harness")` 与 `follow_up(text, origin="harness")` 用于运行时发起或排入的一轮（例如定时任务），只改来源标记，drain 点不变；
 - 消息真正写入 transcript 的时机由 `run_loop` 的 drain 点决定。
 
 `run_loop` 的 drain 点：
@@ -382,6 +385,7 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 6. 调用方传入的 `messages` 不被修改。
 7. `agent` 不 import `coding`，不 import `ai` 的具体适配器；网络只出现在 `Agent.connect()` 建的 client 里。
 8. 每个工具调用的 `ToolExecutionUpdate` 只出现在它的 `ToolExecutionStart` 与 `ToolExecutionEnd` 之间，且不写入历史。
+9. 运行时注入的消息一律是 `UserMessage(origin="harness")`，从不伪装成 `ToolResultMessage`；`origin` 不进入请求体，只用于 UI、会话文件与压缩标注。
 
 ## 10. 实现状态与文件职责
 
@@ -392,8 +396,8 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 | `base.py` | `AgentTool` 协议（含 `execution_mode`）与 `LoopConfig`（含 `hooks`、`tool_timeout`、两个 getter） |
 | `validation.py` | 基于 `jsonschema` 的完整参数校验与错误格式化 |
 | `loop.py` / `run_loop` | 轮次、终止判断、事件转发、hook 调用 |
-| `agent.py` / `Agent` | 有状态门面：历史、状态、`steer` / `follow_up`、`abort` / `wait_for_idle` / `reset`、`connect` / `aclose`（连接池寿命） |
-| `queues.py` / `PendingMessageQueue` | steering / follow-up 的待注入消息队列 |
+| `agent.py` / `Agent` | 有状态门面：历史、状态、`steer` / `follow_up` / `notify`、`abort` / `wait_for_idle` / `reset`、`connect` / `aclose`（连接池寿命） |
+| `queues.py` / `PendingMessageQueue` | steering / follow-up 的待注入消息队列；`notify` 复用 steering 那条 |
 | `_build_registry` | 按名字建索引、检查重名 |
 | `_can_run_parallel` | 规则 A：整批调用是否全部可并行 |
 | `_run_tool` | 执行一次工具调用并计时，注入 `on_update` |

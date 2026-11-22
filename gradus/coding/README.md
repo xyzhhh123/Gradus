@@ -81,6 +81,7 @@ gradus/coding/
 ├── session.py          # session assembly and JSONL history
 ├── context.py          # token budget, cut point, summarization
 ├── retry.py            # run-level retry policy (same model)
+├── retrieval.py        # tokenize + BM25 (tool_search / recall_history)
 ├── registry.py         # tool registry and function-tool adapter
 ├── mcp.py              # MCP servers -> AgentTool
 ├── render.py           # event rendering: display, logs
@@ -92,12 +93,22 @@ gradus/coding/
 ├── workspace.py        # sandbox-owned workspace copy and merge back
 ├── cli.py              # command-line entry point
 ├── tools/
-│   ├── files.py        # read_file / write_file / edit / list_dir
+│   ├── files.py        # read_file / write_file / edit / delete_file
 │   ├── search.py       # grep / glob
-│   └── shell.py        # bash / powershell
+│   ├── shell.py        # bash / powershell
+│   ├── skill.py        # use_skill: 读技能正文（分片）
+│   └── recall_history.py  # recall_history 适配器
 ├── docs/
 │   ├── design.md       # design notes
-│   └── problem.md      # archive of solved problems
+│   ├── problem.md      # archive of solved problems
+│   ├── sandbox.md      # sandbox: boundaries, mechanisms, limits
+│   ├── sandbox_reference.md  # six harnesses compared on sandboxing
+│   ├── changelog.md     # dated change log
+│   ├── exec_environment.md  # remote exec environment design
+│   ├── context_design.md   # context management: records, view, compaction
+│   ├── skill_reference.md  # 技能系统：六家 harness 调研
+│   ├── recall.md       # 召回: id/keyword retrieval, selector fallback
+│   └── ...             # one file per topic (multi-agent, cron, background, ...)
 └── tests/
 ```
 

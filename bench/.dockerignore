@@ -1,0 +1,9 @@
+.venv
+.git
+__pycache__
+*.pyc
+web/node_modules
+web/dist
+bench/runs
+bench/tests
+docs

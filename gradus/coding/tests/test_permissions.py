@@ -28,7 +28,7 @@ class PolicyTest(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_read_tools_are_allowed(self):
-        for name in ("read_file", "list_dir", "grep", "glob"):
+        for name in ("read_file", "grep", "glob"):
             with self.subTest(name=name):
                 self.assertEqual(self.policy.decide(name, {"path": "a.txt"}).action, "allow")
 

@@ -60,7 +60,7 @@ class _FakeAgent:
     def messages(self):
         return ()
 
-    def prompt(self, text: str):
+    def prompt(self, text: str, *, origin: str = "user"):
         self.calls.append("prompt")
         return self._events(self.scripts.pop(0))
 

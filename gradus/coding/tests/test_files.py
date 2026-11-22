@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
 
+from gradus.coding.tools import files
 from gradus.coding.tools.files import (
     MAX_LINES,
     create_file_tools,
@@ -24,9 +26,6 @@ class FileToolsTest(unittest.IsolatedAsyncioTestCase):
 
     async def _read(self, **arguments):
         return await self.tools["read_file"].execute("call_1", arguments)
-
-    async def _list(self, **arguments):
-        return await self.tools["list_dir"].execute("call_1", arguments)
 
     def _write(self, name: str, text: str) -> Path:
         path = self.root / name
@@ -110,48 +109,6 @@ class FileToolsTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(result.is_error)
         self.assertEqual(result.content, "outside")
-
-    async def test_list_sorts_entries_and_marks_directories(self):
-        self._write("b.txt", "")
-        self._write("a.txt", "")
-        self._write(".env", "")
-        (self.root / "sub").mkdir()
-
-        result = await self._list()
-
-        self.assertFalse(result.is_error)
-        self.assertEqual(result.content, ".env\na.txt\nb.txt\nsub/")
-
-    async def test_list_reports_empty_directory(self):
-        result = await self._list()
-
-        self.assertEqual(result.content, "(empty directory)")
-
-    async def test_list_honours_limit(self):
-        for name in ("a.txt", "b.txt", "c.txt"):
-            self._write(name, "")
-
-        result = await self._list(limit=2)
-
-        self.assertEqual(
-            result.content,
-            "a.txt\nb.txt\n\n[2 entries limit reached. Use limit=4 for more]",
-        )
-
-    async def test_list_reports_missing_path(self):
-        result = await self._list(path="missing")
-
-        self.assertTrue(result.is_error)
-        self.assertIn("Path not found", result.content)
-
-    async def test_list_rejects_file(self):
-        self._write("a.txt", "")
-
-        result = await self._list(path="a.txt")
-
-        self.assertTrue(result.is_error)
-        self.assertIn("Not a directory", result.content)
-
 
 class WriteToolsTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -317,5 +274,90 @@ class WriteToolsTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("File not found", result.content)
 
 
+class PathLockTest(unittest.IsolatedAsyncioTestCase):
+    """同一个文件的「读-改-写」要排队：并行批次里不能互相覆盖。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.tools = {tool.spec.name: tool for tool in create_file_tools(self.root)}
+        self.path = self.root / "a.txt"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_same_path_shares_one_lock(self):
+        locks = files.PathLocks()
+        target = self.root / "a.txt"
+
+        self.assertIs(locks.lock_for(target), locks.lock_for(target))
+        self.assertIsNot(locks.lock_for(target), locks.lock_for(self.root / "b.txt"))
+
+    async def test_lock_is_mutually_exclusive(self):
+        locks = files.PathLocks()
+        target = self.root / "a.txt"
+        held = locks.lock_for(target)
+        await held.acquire()
+
+        async def second_attempt() -> bool:
+            async with locks.lock_for(target):
+                return True
+
+        task = asyncio.create_task(second_attempt())
+        await asyncio.sleep(0)
+        # 第一个持有期间，第二个必须拿不到
+        self.assertFalse(task.done())
+
+        held.release()
+        self.assertTrue(await asyncio.wait_for(task, timeout=1))
+
+    async def test_concurrent_edits_do_not_lose_updates(self):
+        self.path.write_text("alpha\nbeta\n", encoding="utf-8")
+        reader = self.tools["read_file"]
+        editor = self.tools["edit"]
+        await reader.execute("c0", {"path": "a.txt"})
+
+        first, second = await asyncio.gather(
+            editor.execute(
+                "c1",
+                {"path": "a.txt", "edits": [{"old_text": "alpha", "new_text": "ALPHA"}]},
+            ),
+            editor.execute(
+                "c1",
+                {"path": "a.txt", "edits": [{"old_text": "beta", "new_text": "BETA"}]},
+            ),
+        )
+
+        self.assertFalse(first.is_error, first.content)
+        self.assertFalse(second.is_error, second.content)
+        # 不加锁时后写的一方会覆盖前一方：两次替换只剩一个生效
+        self.assertEqual(self.path.read_text("utf-8"), "ALPHA\nBETA\n")
+
+    async def test_concurrent_writes_to_one_path_end_up_consistent(self):
+        writer = self.tools["write_file"]
+
+        await asyncio.gather(
+            writer.execute("c1", {"path": "a.txt", "content": "one"}),
+            writer.execute("c1", {"path": "a.txt", "content": "two"}),
+        )
+
+        self.assertIn(self.path.read_text("utf-8"), {"one", "two"})
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class LfWriteTest(unittest.TestCase):
+    """写文件必须落 LF：CRLF 会让 git diff 把整棵树算成改动。"""
+
+    def test_write_lf_keeps_lf(self):
+        import tempfile
+        from pathlib import Path as _Path
+
+        from gradus.coding.tools.files import _write_lf
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = _Path(tmp) / "a.txt"
+            _write_lf(target, "one\ntwo\n")
+            self.assertEqual(target.read_bytes(), b"one\ntwo\n")

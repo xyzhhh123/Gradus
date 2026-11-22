@@ -173,3 +173,13 @@ class CodemodeTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result.is_error)
         self.assertEqual(result.content, "code is required")
+
+    async def test_output_cap_is_configurable(self):
+        tool = create_codemode_tool(
+            [], Policy(workspace=self.root), None, output_chars=100
+        )
+
+        result = await tool.execute("c1", {"code": "text('x' * 400)"})
+
+        # 100 字符就落盘，说明上限来自构造参数而不是模块常量。
+        self.assertIn("已存到", result.content)

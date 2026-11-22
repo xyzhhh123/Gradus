@@ -57,7 +57,7 @@ It does not:
 - `LoopConfig`: `system`, `tools`, `max_turns`, `max_output_tokens`, `temperature`, `reasoning`, `tool_timeout`, `hooks`, `get_steering_messages`, `get_follow_up_messages`
 - `AgentHooks`: `before_run` / `transform_messages` / `prepare_request` / `before_tool_call` / `after_tool_call` / `finish_turn` / `prepare_next_turn` / `before_finish` / `on_max_turns`, all optional
 - `AgentError.kind`: `provider` / `aborted` / `max_turns` / `config`
-- `Agent.connect(spec, config, *, api_key="", client=None)` and `Agent.aclose()`: a pool the agent created is closed by `aclose()`; an injected pool is only borrowed.
+- `Agent.connect(spec, config, *, api_key="", client=None, headers=None)` and `Agent.aclose()`: a pool the agent created is closed by `aclose()`; an injected pool is only borrowed. `headers` carries configured custom request headers (org / session ids a gateway asks for) straight to the provider.
 - There are exactly two terminal events: `AgentDone` and `AgentError`; `max_turns` counts model requests.
 
 See [docs/design.md](docs/design.md) for fields, ordering, and terminal semantics.

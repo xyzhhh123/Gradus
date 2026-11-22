@@ -95,20 +95,26 @@ GREP_SPEC = ToolSpec(
 GLOB_SPEC = ToolSpec(
     name="glob",
     description=(
-        "Find files by glob pattern, e.g. '*.py' or 'src/**/*.test.ts'. "
-        "Returns paths relative to the searched directory, skipping common "
-        f"ignore directories. Output is capped at {GLOB_LIMIT} paths."
+        "Find files or directories by glob pattern, e.g. '*.py' or 'src/**/*.test.ts'. "
+        "Paths are relative to the searched directory; common ignore directories are "
+        "skipped. `mode=dirs` lists matching directories instead (directories end "
+        f"with '/'); use pattern '*' to list one directory level. Capped at {GLOB_LIMIT} paths."
     ),
     parameters={
         "type": "object",
         "properties": {
             "pattern": {
                 "type": "string",
-                "description": "Glob pattern, e.g. '**/*.json'",
+                "description": "Glob pattern, e.g. '**/*.json' or '*'",
             },
             "path": {
                 "type": "string",
                 "description": "Directory to search (default: working directory)",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["files", "dirs"],
+                "description": "Match files (default) or directories",
             },
             "limit": {
                 "type": "integer",
@@ -186,6 +192,11 @@ class GlobTool:
             return ToolResult(f"Not a directory: {base}", is_error=True)
 
         limit = max(1, int(arguments.get("limit") or GLOB_LIMIT))
+        mode = str(arguments.get("mode") or "files")
+        if mode not in ("files", "dirs"):
+            return ToolResult("mode must be 'files' or 'dirs'", is_error=True)
+        if mode == "dirs":
+            return await asyncio.to_thread(_glob_dirs, base, pattern, limit)
         return await asyncio.to_thread(_glob, base, pattern, limit)
 
 
@@ -268,6 +279,24 @@ def _glob(base: Path, pattern: str, limit: int) -> ToolResult:
         body += "\n… results truncated; narrow the pattern or raise limit …"
     return ToolResult(body)
 
+
+def _glob_dirs(base: Path, pattern: str, limit: int) -> ToolResult:
+    """列目录（`list_dir` 并进来的那一半）：目录带 `/`、按大小写不敏感排序。"""
+    results = [
+        path.relative_to(base).as_posix() + "/"
+        for path in base.glob(pattern)
+        if path.is_dir() and not _ignored(path, base)
+    ]
+
+    if not results:
+        return ToolResult("(no matches)")
+
+    results.sort(key=str.casefold)
+    truncated = len(results) > limit
+    body = "\n".join(results[:limit])
+    if truncated:
+        body += "\n… results truncated; narrow the pattern or raise limit …"
+    return ToolResult(body)
 
 def _walk(root: Path) -> Iterator[Path]:
     for current, dirs, files in os.walk(root):

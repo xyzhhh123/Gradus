@@ -159,7 +159,8 @@ gradus/ai/
 ├── stream_assembler.py         # 共用装配器：块开关、partial 快照、content_index 分配
 ├── transport.py                # 传输层：POST、SSE 解析、重试、失败归一
 ├── envfile.py                  # `.env` 解析：文件优先、空值跳过；record.py 与 coding CLI 共用
-├── services.py                 # 内置服务商表：名字 -> (协议, base_url)；record.py 与 coding CLI 共用
+├── services.py                 # 内置服务商表：名字 -> (协议, base_url) + 该服务必需的请求头
+├── models.py                   # 模型能力表（窗口 / 输出上限）+ 可选的 /models 探测
 ├── ai_plan.md                  # 里程碑、进度检查、偏差记录
 ├── docs/
 │   ├── design.md                 # 实现说明：逐文件的协议映射与取舍
@@ -173,6 +174,7 @@ gradus/ai/
 │   ├── test_openai_compat.py     # Chat Completions 形状的请求与响应测试
 │   ├── test_openai_responses.py  # Responses 形状的请求与响应测试
 │   ├── test_replay.py            # 整段原始流的回放测试
+│   ├── test_models.py            # 模型能力表与探测的离线测试
 │   └── test_transport.py         # SSE 解析与重试的离线测试
 ├── scripts/
 │   ├── bodies/                   # 录制用的请求体：<service>.json 与 <service>-<场景>.json
@@ -181,7 +183,7 @@ gradus/ai/
 │   ├── record.py                 # 录一条真实流到 fixtures
 │   └── replay.py                 # 回放 fixture 并打印内部事件
 └── providers/
-    ├── __init__.py             # 工厂：create_provider(spec, api_key, client=None)
+    ├── __init__.py             # 工厂：create_provider(spec, api_key, client=None, headers=None)
     ├── openai_compat.py        # Chat Completions 形状（DeepSeek、Qwen、Kimi、GLM、Ollama）
     ├── anthropic.py            # Messages 形状（Claude）
     ├── gemini.py               # generateContent 形状（Gemini，测试中）
@@ -199,6 +201,7 @@ gradus/ai/
 | `transport.py` | 网络 I/O 与 SSE 切分 | 认识任何厂商字段、知道 12 个事件 |
 | `envfile.py` | 把 `.env` 读进 `os.environ`（文件优先、空值跳过） | 展开变量、碰网络或协议、import `gradus.coding` |
 | `services.py` | 服务商名到 `(协议, base_url)` 的映射 | 放请求逻辑、凭证或厂商字段解析 |
+| `models.py` | 每个模型的窗口 / 输出上限，以及可选的 `/models` 探测 | 决定上下文预算（那是 `coding` 的事），或在探测失败时抛错 |
 | `providers/*` | 厂商线上格式 <-> 内部协议 | 自己累积消息状态、自造事件 |
 | `tests/*` | 断言事件序列与终止路径 | 联网、为迁就实现而改断言 |
 | `tests/adapter.py` | 把各文件的用例汇总成一个可执行入口 | 写断言、导入任何 `gradus` 模块 |

@@ -98,12 +98,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Mapping
 from typing import Any
 
 import httpx
 
-from ..base import ModelSpec, Request, ToolSpec
+from ..base import expand_headers, ModelSpec, Request, ToolSpec
 from ..stream_assembler import StreamAssembler
 from ..transport import TransportFailure, post_sse
 from ..types import (
@@ -284,9 +284,12 @@ class OpenAIChatProvider:
         spec: ModelSpec,
         api_key: str = "",
         client: httpx.AsyncClient | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         self.spec = spec
         self.api_key = api_key
+        # 配置里的自定义请求头；`{run}` 在这里展开成实例级随机 id
+        self._extra_headers = expand_headers(headers)
         # 注入的 client 由调用方关闭；None 时 post_sse 每次自建并 aclose（D29）
         self._client = client
 
@@ -299,73 +302,77 @@ class OpenAIChatProvider:
         saw_refusal = False
 
         try:
-            async for event in post_sse(
+            events = post_sse(
                 self._url(),
                 headers=self._headers(),
                 payload=build_payload(request, self.spec),
                 client=self._client,
-            ):
-                if isinstance(event, TransportFailure):
-                    # 先把已攒下的调用补出来，partial 里至少能看到调用了什么
-                    for _event in replay_tool_calls(assembler, pending):
-                        yield _event
-                    for _event in assembler.fail("error", event.message):
-                        yield _event
-                    return
+            )
+            try:
+                async for event in events:
+                    if isinstance(event, TransportFailure):
+                        # 先把已攒下的调用补出来，partial 里至少能看到调用了什么
+                        for _event in replay_tool_calls(assembler, pending):
+                            yield _event
+                        for _event in assembler.fail("error", event.message):
+                            yield _event
+                        return
 
-                data = event.data.strip()
-                if data == "[DONE]":
-                    break
+                    data = event.data.strip()
+                    if data == "[DONE]":
+                        break
 
-                chunk = json.loads(data)
+                    chunk = json.loads(data)
 
-                # 个别兼容端点会在 200 的流里发错误对象，不识别的话会静默变成空消息
-                if error := chunk.get("error"):
-                    detail = error.get("message", "stream error") if isinstance(error, dict) else str(error)
-                    for _event in replay_tool_calls(assembler, pending):
-                        yield _event
-                    for _event in assembler.fail("error", detail):
-                        yield _event
-                    return
+                    # 个别兼容端点会在 200 的流里发错误对象，不识别的话会静默变成空消息
+                    if error := chunk.get("error"):
+                        detail = error.get("message", "stream error") if isinstance(error, dict) else str(error)
+                        for _event in replay_tool_calls(assembler, pending):
+                            yield _event
+                        for _event in assembler.fail("error", detail):
+                            yield _event
+                        return
 
-                if usage := chunk.get("usage"):
-                    assembler.add_usage(parse_usage(usage))
-
-                for choice in chunk.get("choices") or []:
-                    # 只认第一条候选；混进同一条消息会串味
-                    if choice.get("index", 0) != 0:
-                        continue
-
-                    # Kimi 把 usage 塞在 choice 里而不是顶层；顶层已有就不重复累加
-                    if not chunk.get("usage") and (usage := choice.get("usage")):
+                    if usage := chunk.get("usage"):
                         assembler.add_usage(parse_usage(usage))
 
-                    delta = choice.get("delta") or {}
+                    for choice in chunk.get("choices") or []:
+                        # 只认第一条候选；混进同一条消息会串味
+                        if choice.get("index", 0) != 0:
+                            continue
 
-                    if reasoning := delta.get("reasoning_content"):
-                        for _event in assembler.thinking(reasoning):
-                            yield _event
+                        # Kimi 把 usage 塞在 choice 里而不是顶层；顶层已有就不重复累加
+                        if not chunk.get("usage") and (usage := choice.get("usage")):
+                            assembler.add_usage(parse_usage(usage))
 
-                    if content := delta.get("content"):
-                        for _event in assembler.text(content):
-                            yield _event
+                        delta = choice.get("delta") or {}
 
-                    # 拒答是独立字段：先关掉正文块，再单独开一个带标记的文本块
-                    if refusal := delta.get("refusal"):
-                        saw_refusal = True
-                        for _event in assembler.end_text():
-                            yield _event
-                        for _event in assembler.start_text(refusal=True):
-                            yield _event
-                        for _event in assembler.text(refusal):
-                            yield _event
+                        if reasoning := delta.get("reasoning_content"):
+                            for _event in assembler.thinking(reasoning):
+                                yield _event
 
-                    for call in delta.get("tool_calls") or []:
-                        collect_tool_call(pending, call)
+                        if content := delta.get("content"):
+                            for _event in assembler.text(content):
+                                yield _event
 
-                    if reason := choice.get("finish_reason"):
-                        stop_reason = STOP_REASONS.get(reason, "stop")
+                        # 拒答是独立字段：先关掉正文块，再单独开一个带标记的文本块
+                        if refusal := delta.get("refusal"):
+                            saw_refusal = True
+                            for _event in assembler.end_text():
+                                yield _event
+                            for _event in assembler.start_text(refusal=True):
+                                yield _event
+                            for _event in assembler.text(refusal):
+                                yield _event
 
+                        for call in delta.get("tool_calls") or []:
+                            collect_tool_call(pending, call)
+
+                        if reason := choice.get("finish_reason"):
+                            stop_reason = STOP_REASONS.get(reason, "stop")
+
+            finally:
+                await events.aclose()
             # 工具调用攒到最后再发。assembler 同一时刻只能开一个块，而厂商会用
             # index 交错给出多个并行调用；参数本来也要拼完才能用，不损失流式价值。
             for _event in replay_tool_calls(assembler, pending):
@@ -398,4 +405,5 @@ class OpenAIChatProvider:
         # 空 key 表示端点不需要鉴权（如本地 Ollama）
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        headers.update(self._extra_headers)
         return headers

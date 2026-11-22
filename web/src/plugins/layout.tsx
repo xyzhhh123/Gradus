@@ -23,6 +23,19 @@ const CONNECTION_TEXT: Record<string, string> = {
   closed: '未连接',
 }
 
+function formatUsage(usage: {
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+}): string {
+  const compact = (value: number) =>
+    value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${value}`
+  const ratio = usage.inputTokens > 0 ? usage.cacheReadTokens / usage.inputTokens : 0
+  const cache = usage.cacheReadTokens > 0 ? ` · cache ${Math.round(ratio * 100)}%` : ''
+  return `${usage.turns} 轮 · in ${compact(usage.inputTokens)} · out ${compact(usage.outputTokens)}${cache}`
+}
+
 const STATUS_TEXT: Record<string, string> = {
   idle: '就绪',
   running: '生成中',
@@ -526,6 +539,12 @@ function Shell(props: RootProps) {
               <div className="chat-title">会话</div>
               <div className="chat-sub">
                 {state.sandbox.backend} · {state.tools.length} tools
+                {state.usage && state.usage.turns > 0 && (
+                  <>
+                    {' · '}
+                    {formatUsage(state.usage)}
+                  </>
+                )}
               </div>
             </div>
           </div>

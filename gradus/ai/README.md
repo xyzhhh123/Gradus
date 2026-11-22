@@ -161,7 +161,8 @@ gradus/ai/
 ├── stream_assembler.py         # shared assembler: blocks, partial snapshots, content_index
 ├── transport.py                # transport: POST, SSE parsing, retries, failure mapping
 ├── envfile.py                  # `.env` parsing: file wins, blanks skipped; shared with the coding CLI
-├── services.py                 # built-in services: name -> (protocol, base_url); shared with the coding CLI
+├── services.py                 # built-in services: name -> (protocol, base_url) + the headers that service requires
+├── models.py                   # model capabilities (window / output limit) + optional /models probe
 ├── ai_plan.md                  # milestones, progress checks, deviation log
 ├── docs/
 │   ├── design.md                 # per-file notes (Chinese): vendor mappings and trade-offs
@@ -175,6 +176,7 @@ gradus/ai/
 │   ├── test_openai_compat.py     # request and response tests for Chat Completions
 │   ├── test_openai_responses.py  # request and response tests for Responses
 │   ├── test_replay.py            # replay tests over whole recorded streams
+│   ├── test_models.py            # offline tests for the capability table and probe
 │   └── test_transport.py         # offline tests for SSE parsing and retries
 ├── scripts/
 │   ├── bodies/                   # request bodies: <service>.json and <service>-<scenario>.json
@@ -183,7 +185,7 @@ gradus/ai/
 │   ├── record.py                 # record one real stream into fixtures
 │   └── replay.py                 # replay a fixture and print internal events
 └── providers/
-    ├── __init__.py             # factory: create_provider(spec, api_key, client=None)
+    ├── __init__.py             # factory: create_provider(spec, api_key, client=None, headers=None)
     ├── openai_compat.py        # Chat Completions shape (DeepSeek, Qwen, Kimi, GLM, Ollama)
     ├── anthropic.py            # Messages shape (Claude)
     ├── gemini.py               # generateContent shape (Gemini; in testing)
@@ -201,6 +203,7 @@ gradus/ai/
 | `transport.py` | Network I/O and SSE splitting | know any vendor field or the 12 events |
 | `envfile.py` | Reading `.env` into `os.environ` (file wins, blanks skipped) | expand variables, touch the network or the protocol, import `gradus.coding` |
 | `services.py` | Name -> `(protocol, base_url)` mapping for common services | hold request logic, credentials, or vendor field parsing |
+| `models.py` | Per-model capability limits (window / output) and an optional `/models` probe | decide the context budget (that is `coding`), or throw on probe failure |
 | `providers/*` | Vendor wire format <-> internal protocol | accumulate message state or define new events |
 | `tests/*` | Assert event sequences and termination paths | touch the network or bend assertions to fit the implementation |
 | `tests/adapter.py` | Gather every file's cases into one runnable entry | hold assertions or import any `gradus` module |

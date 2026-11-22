@@ -380,11 +380,15 @@ def forget_trust(workspace: str | Path) -> bool:
 
 def default_user_config_path() -> Path:
     """用户级配置；所有项目共享，不需要项目信任。"""
-    return Path.home() / USER_CONFIG_RELPATH
+    from .config import gradus_home
+
+    return gradus_home() / "mcp.json"
 
 
 def trust_file() -> Path:
-    return Path.home() / TRUST_RELPATH
+    from .config import gradus_home
+
+    return gradus_home() / "trusted.json"
 
 
 def is_trusted(workspace: str | Path) -> bool:

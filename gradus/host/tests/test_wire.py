@@ -147,3 +147,25 @@ class WireTest(unittest.TestCase):
             "warning": "network NOT isolated",
         }
         assert "session/message" in payload["capabilities"]
+
+
+class UsageTotalsPayloadTest(unittest.TestCase):
+    def test_maps_totals_to_wire_names(self):
+        from gradus.host.wire import usage_totals_payload
+
+        payload = usage_totals_payload(
+            {"turns": 3, "input": 14146, "output": 142, "cacheRead": 8192, "cacheWrite": 0}
+        )
+
+        assert payload == {
+            "turns": 3,
+            "inputTokens": 14146,
+            "outputTokens": 142,
+            "cacheReadTokens": 8192,
+            "cacheWriteTokens": 0,
+        }
+
+    def test_missing_keys_default_to_zero(self):
+        from gradus.host.wire import usage_totals_payload
+
+        assert usage_totals_payload({})["turns"] == 0

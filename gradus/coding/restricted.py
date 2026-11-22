@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import os
 import secrets
 import shutil
 import sys
@@ -55,21 +56,30 @@ LUA_TOKEN = 0x00000004
 WRITE_RESTRICTED = 0x00000008
 SE_GROUP_LOGON_ID = 0xC0000000
 
-#: 合成 SID 没有注册过，`icacls *SID` 会报 1332（no mapping）。
-#: 用 PowerShell 的 ACL 对象直接加规则，接受未解析的 SID。
+#: 合成 SID 没有注册过，`icacls *SID` 会报 1332（no mapping），所以直接改 ACL 对象。
+#:
+#: 不用 `Get-Acl` / `Set-Acl`，两个坑：
+#: - `Get-Acl` 在 `Microsoft.PowerShell.Security` 里，父进程是 pwsh 时子进程继承到的
+#:   `PSModulePath` 是 PS7 的，5.1 解析到 PS7 的模块加载失败，脚本 exit 1；
+#: - `Set-Acl` 在**受保护 DACL** 的目录上要求 `SeSecurityPrivilege`，而
+#:   `tempfile.mkdtemp` 建出来的目录正是受保护的（SDDL 里带 `D:P`），非提权跑不通。
+#:
+#: `DirectoryInfo.GetAccessControl()` / `SetAccessControl()`（Win32 `SetSecurityInfo`）
+#: 两个毛病都没有：不依赖模块，改的也只是 DACL。整段只用 .NET 类型，不调 cmdlet。
 _ACL_SCRIPT = """
 $ErrorActionPreference = 'Stop'
 $path = '{path}'
 $sid = [System.Security.Principal.SecurityIdentifier]'{sid}'
-$acl = Get-Acl -LiteralPath $path
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+$rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
     $sid,
     [System.Security.AccessControl.FileSystemRights]'Modify',
     [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
     [System.Security.AccessControl.PropagationFlags]'None',
     [System.Security.AccessControl.AccessControlType]'Allow')
-$acl.{action}($rule)
-Set-Acl -LiteralPath $path -AclObject $acl
+$info = [System.IO.DirectoryInfo]::new($path)
+$security = $info.GetAccessControl()
+$security.{action}($rule)
+$info.SetAccessControl($security)
 """
 
 _ACL_TIMEOUT = 120.0
@@ -155,6 +165,36 @@ def random_sid() -> str:
     return "S-1-5-21-" + "-".join(str(part) for part in parts)
 
 
+def _legacy_module_env() -> dict[str, str]:
+    """给 Windows PowerShell 5.1 子进程一份它自己的模块路径。
+
+    `_acl` 跑的是 5.1（`powershell`，每台 Windows 都有），它继承的 `PSModulePath`
+    若来自 pwsh 父进程，里面是 PS7 的目录，5.1 会加载 PS7 的模块而失败。ACL 脚本已经
+    不调任何 cmdlet（见 `_ACL_SCRIPT`），这里只留一条保险：以后要在里面用 cmdlet，
+    不至于又踩一遍模块加载的坑。
+    """
+    home = os.environ.get("USERPROFILE")
+    program_files = os.environ.get("ProgramFiles")
+    windir = os.environ.get("SystemRoot") or os.environ.get("windir")
+
+    parts: list[str] = []
+    if home:
+        parts.append(str(Path(home) / "Documents" / "WindowsPowerShell" / "Modules"))
+    if program_files:
+        parts.append(str(Path(program_files) / "WindowsPowerShell" / "Modules"))
+    if windir:
+        parts.append(
+            str(Path(windir) / "System32" / "WindowsPowerShell" / "v1.0" / "Modules")
+        )
+
+    env = dict(os.environ)
+    if parts:
+        env["PSModulePath"] = os.pathsep.join(parts)
+    else:
+        env.pop("PSModulePath", None)
+    return env
+
+
 async def _acl(target: Path, sid: str, action: str) -> None:
     """给目录增删一条继承的可修改 ACE；`action` 是 ACL 对象的方法名。"""
     escaped = str(target).replace("'", "''")
@@ -168,6 +208,7 @@ async def _acl(target: Path, sid: str, action: str) -> None:
             script,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            env=_legacy_module_env(),
         )
     except OSError as exc:
         raise SandboxError(f"cannot run powershell for ACL: {exc}") from exc

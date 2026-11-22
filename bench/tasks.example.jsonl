@@ -1,0 +1,1 @@
+{"id": "example__demo-1", "instruction": "仓库里有个 bug：`add` 在负数相加时返回 0。请修复并让 `python -m pytest -q` 通过。", "workspace": "D:/bench/work/example__demo-1", "repo": "example/demo", "base_commit": "HEAD", "test_cmd": "python -m pytest -q"}

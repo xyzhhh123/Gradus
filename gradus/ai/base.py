@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
+from uuid import uuid4
 
 from .types import AssistantEvent, Message
 
@@ -20,6 +21,32 @@ ProviderName = Literal[
 ]
 
 ReasoningLevel = Literal["minimal", "low", "medium", "high"]
+
+#: 自定义请求头里的占位符：换成本次运行的随机 id。
+RUN_PLACEHOLDER = "{run}"
+
+
+def expand_headers(
+    headers: Mapping[str, str] | None,
+    *,
+    run_id: str | None = None,
+) -> dict[str, str]:
+    """展开自定义请求头：把 `{run}` 换成本次运行的随机 id。
+
+    有些网关要求客户端带一个「会话 id」来优化路由与缓存（例如 OpenCode Go 的
+    `x-opencode-session`），而这个 id 只需要在**一次会话里稳定**、不该麻烦用户自己编。
+    所以配置里写 `{run}`，这里换成一个随机值。**幂等**：已经展开过的值再调用一次不变，
+    所以上层可以提前固化（`coding.session` 在会话创建时展开一次，主对话、摘要、合并都
+    带同一个 id——摘要若换 id，网关会把它路由到没缓存的机器上，前缀缓存直接归零）。
+    不提前固化时，退化为「一个 Provider 实例一个 id」。`run_id` 只在测试里显式给。
+    """
+    if not headers:
+        return {}
+    resolved = run_id or uuid4().hex[:16]
+    return {
+        str(key): str(value).replace(RUN_PLACEHOLDER, resolved)
+        for key, value in headers.items()
+    }
 
 # 思考档位对应的 token 预算，只给按预算控制强度的厂商（Anthropic、Gemini）用。
 # 数值沿用 Pi 的默认表；我们没有 xhigh / max，四档足够区分"少想"和"多想"。
@@ -46,6 +73,10 @@ class ModelSpec:
 
     同一套 openai_compat 适配器靠这张表覆盖 DeepSeek / Qwen / Kimi / GLM 等，
     不为每个品牌写一个类。api_key 由上层读好，构造 Provider 时传入。
+
+    `context_window` / `max_output_tokens` 是**预算口径**（我们按多大做上下文管理），
+    `window_limit` / `output_limit` 是**模型能力**（元数据或静态表给的物理上限）。
+    前者可以比后者小（压低是成本控制），不该比后者大——`config` 负责收敛。
     """
 
     provider: ProviderName
@@ -53,6 +84,8 @@ class ModelSpec:
     base_url: str
     context_window: int
     max_output_tokens: int
+    window_limit: int | None = None
+    output_limit: int | None = None
 
 
 @dataclass(frozen=True)
@@ -85,8 +118,9 @@ class Provider(Protocol):
     3. 事件顺序：StreamStart -> 各内容块的三阶段 -> StreamDone / StreamError。
     4. content_index 由本层统一编号，从 0 递增，与厂商自己的索引无关。
 
-    构造约定：所有实现都必须能以 (spec, api_key) 构造。api_key 由上层读好传入，
-    本层不读环境变量；空字符串表示端点不需要鉴权（如本地 Ollama）。
+    构造约定：所有实现都必须能以 (spec, api_key) 构造，并接受两个可选关键字
+    `client`（复用的连接池）与 `headers`（配置里的自定义请求头）。api_key 由上层
+    读好传入，本层不读环境变量；空字符串表示端点不需要鉴权（如本地 Ollama）。
     Protocol 表达不了构造函数，这条靠实现与测试保证。
 
     同一个实例可以被多个会话并发调用：真实适配器的 `stream()` 不写实例状态，

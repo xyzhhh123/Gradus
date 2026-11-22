@@ -183,14 +183,33 @@ class ExtensionTest(unittest.TestCase):
 
         self.assertEqual(self._load().skill("lint").body(), "run the linter")
 
-    def test_skills_section_lists_name_description_and_path(self):
+    def test_skills_section_lists_name_and_description_without_path(self):
         self._skill("lint", "check style", "run the linter")
 
         text = extensions.skills_section(self._load().skills)
 
+        self.assertIn("call use_skill", text)
         self.assertIn("- lint: check style", text)
-        self.assertIn("SKILL.md", text)
+        # 路径不出现：正文由 use_skill 提供，留路径只会诱导模型绕过工具
+        self.assertNotIn("SKILL.md", text)
+        self.assertNotIn(str(self.root), text)
         self.assertEqual(extensions.skills_section(()), "")
+
+    def test_long_description_is_truncated_in_the_index(self):
+        description = "x" * (extensions.INDEX_DESCRIPTION_LIMIT + 50)
+        skill = extensions.Skill("long", description, Path("SKILL.md"))
+
+        line = extensions.skills_section([skill])
+
+        self.assertIn("…", line)
+        self.assertLess(len(line), extensions.INDEX_DESCRIPTION_LIMIT + 60)
+
+    def test_skill_description_has_a_hard_limit(self):
+        self._skill("long", "x" * (extensions.DESCRIPTION_LIMIT + 1), "body")
+
+        warnings = self._load().warnings
+
+        self.assertTrue(any("too long" in item or "longer than" in item for item in warnings))
 
     def test_build_tools_skips_conflicting_extension_tool(self):
         self._tool("read_file")
@@ -209,6 +228,66 @@ class ExtensionTest(unittest.TestCase):
 
 
 class SessionExtensionTest(unittest.IsolatedAsyncioTestCase):
+
+    async def test_extensions_load_from_the_host_workspace_not_the_copy(self):
+        """.gradus 被 COPY_SKIP 排除在副本外：扩展必须从宿主加载。
+
+        这条钉住的是「别把 extensions.load(root) 改成 tool_root」——副本里没有
+        .gradus，改了就一个技能都加载不到。这里真的建一份副本（非 git 目录整树复制），
+        所以 tool_root 与宿主 workspace 是两个不同的路径。
+        """
+        from unittest.mock import patch
+
+        from gradus.coding import workspace
+
+        self.assertIn(".gradus", workspace.COPY_SKIP)
+
+        skill = self.folder / "skills" / "lint" / "SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text(
+            "---\ndescription: check style\n---\nrun the linter", encoding="utf-8"
+        )
+        copy = await workspace.create(self.workspace)
+        self.assertFalse((copy.path / ".gradus").exists(), "副本不应包含 .gradus")
+
+        seen: list[object] = []
+        real_load = extensions.load
+
+        def spy(folder, **kwargs):
+            seen.append(folder)
+            return real_load(folder, **kwargs)
+
+        async def fake_environment(settings, root):
+            return None, "", (), copy
+
+        try:
+            with patch.object(session, "is_trusted", lambda *a, **k: True), patch.object(
+                session.extensions, "load", spy
+            ), patch.object(session, "_build_environment", fake_environment):
+                one = await session.Session.connect(
+                    _settings(), workspace=self.workspace
+                )
+                try:
+                    self.assertNotEqual(one._tool_root, self.workspace)
+                    self.assertEqual(len(one.skills), 1, "副本会话应仍能加载宿主技能")
+                    skill_path = Path(one.skills[0].path).resolve()
+                    self.assertTrue(
+                        skill_path.is_relative_to(self.workspace.resolve()),
+                        f"技能路径应在宿主工作区内：{skill_path}",
+                    )
+                    self.assertFalse(
+                        skill_path.is_relative_to(Path(one._tool_root).resolve()),
+                        "技能路径不应指向副本",
+                    )
+                finally:
+                    await one.aclose()
+        finally:
+            await copy.discard()
+
+        self.assertEqual(
+            [Path(folder).resolve() for folder in seen], [self.workspace.resolve()]
+        )
+
     async def asyncSetUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
@@ -240,7 +319,7 @@ class SessionExtensionTest(unittest.IsolatedAsyncioTestCase):
         try:
             self.assertEqual([item.name for item in one.commands], ["review"])
             self.assertEqual([item.name for item in one.skills], ["lint"])
-            self.assertIn("Skills (read the file", one.system)
+            self.assertIn("Skills (call use_skill", one.system)
             self.assertIn("check style", one.system)
             self.assertIn("echo", [tool.spec.name for tool in one._tools])
             with self.assertRaises(session.SessionError):

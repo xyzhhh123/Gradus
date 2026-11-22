@@ -59,6 +59,20 @@ RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
 DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
+
+def _user_agent() -> str:
+    """客户端标识。有些网关明确要求「自己的名字」而不是通用 SDK 的 UA。"""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        return f"gradus/{version('gradus')}"
+    except (PackageNotFoundError, ImportError):  # 源码树里直接跑，没有安装元数据
+        return "gradus"
+
+
+#: 自建连接池时统一带上的请求头。注入 client 时由注入方决定。
+DEFAULT_HEADERS = {"User-Agent": _user_agent()}
+
 # 单次失败响应体最多带多少字符进错误消息，避免把整页 HTML 塞进事件
 _MAX_ERROR_BODY = 300
 
@@ -127,9 +141,16 @@ def parse_sse(lines: Iterable[str]) -> Iterator[SseEvent]:
 async def _parse_sse_async(lines: AsyncIterable[str]) -> AsyncIterator[SseEvent]:
     """`parse_sse` 的异步版：同一份状态机，只是逐行 await 取。"""
     parser = _SseParser()
-    async for raw in lines:
-        if event := parser.feed(raw):
-            yield event
+    iterator = lines.__aiter__()
+    try:
+        async for raw in iterator:
+            if event := parser.feed(raw):
+                yield event
+    finally:
+        # `aiter_lines()` 也是异步生成器：不关它，httpx 的响应体不会被释放。
+        close = getattr(iterator, "aclose", None)
+        if close is not None:
+            await close()
     if event := parser.close():
         yield event
 
@@ -157,20 +178,23 @@ async def post_sse(
     """
     owned = client is None
     if client is None:
-        client = httpx.AsyncClient()
+        client = httpx.AsyncClient(headers=DEFAULT_HEADERS)
 
+    events = _post_with_retry(
+        client,
+        url,
+        headers=headers,
+        payload=payload,
+        timeout=timeout,
+        max_retries=max_retries,
+        backoff=backoff,
+    )
     try:
-        async for item in _post_with_retry(
-            client,
-            url,
-            headers=headers,
-            payload=payload,
-            timeout=timeout,
-            max_retries=max_retries,
-            backoff=backoff,
-        ):
+        async for item in events:
             yield item
     finally:
+        # 调用方可能只取到 `[DONE]` 就结束迭代；不显式关掉它，httpx 的流会一直挂着。
+        await events.aclose()
         if owned:
             await client.aclose()
 
@@ -203,8 +227,9 @@ async def _post_with_retry(
                         yield TransportFailure(message, response.status_code)
                         return
                 else:
+                    parsed = _parse_sse_async(response.aiter_lines())
                     try:
-                        async for item in _parse_sse_async(response.aiter_lines()):
+                        async for item in parsed:
                             yield item
                     except httpx.HTTPError as exc:
                         # 已经交付过内容，不重试，避免重复
@@ -212,6 +237,9 @@ async def _post_with_retry(
                             f"stream interrupted: {type(exc).__name__}: {exc}",
                             response.status_code,
                         )
+                    finally:
+                        # 上游可能只取到 `[DONE]` 就结束；不关它，httpx 的响应体会一直挂着。
+                        await parsed.aclose()
                     return
 
         except httpx.TimeoutException as exc:

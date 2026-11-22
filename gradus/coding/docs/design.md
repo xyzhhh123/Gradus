@@ -40,14 +40,26 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 
 `.env` 按「一套连接」组织：`GRADUS_SERVICE`（带出协议与 `base_url`）、`GRADUS_MODEL`、`GRADUS_API_KEY` 写在同一个块里，需要自定义端点时再写 `GRADUS_BASE_URL`。单靠 key 认不出服务商——同一协议下有多家（DeepSeek / Kimi / Qwen / GLM 都是 `openai_compat`），同一家又可能提供多种协议（Kimi 三种都有），key 也没有稳定可辨的前缀——所以端点与 key 必须成对出现；换服务商就整段替换，不做「key 反查服务商」的推断。`ai/scripts/record.py` 的 key 解析是「按协议的变量（`OPENAI_COMPAT_API_KEY` 等）优先，其次通用 `GRADUS_API_KEY`」，录制同一家的多种协议时只写一行通用 key 即可。
 
+`headers` / `GRADUS_HEADERS` 是给网关用的**自定义请求头**，两种写法等价：配置文件里是对象（`"headers": {"x-org": "abc"}`），环境变量里是 `k=v;k=v`。值里的 `{run}` 由 `ai.base.expand_headers` 换成本次会话的随机 id——同一个 Provider 实例内稳定，换会话换一个，所以用户不用自己编会话 id。适配器在 `_headers()` 里把这些头并进每次请求，四个协议都支持。
+
+**服务必需的头不用用户写**：`ai.services.SERVICE_HEADERS` 按服务登记「选了就必须带」的头（目前只有 `opencode-go` 的 `x-opencode-session`，缺了它端点回 400）。`Settings.headers` 是两者合并后的**实际值**，`Settings.explicit_headers` 只存用户自己写的那部分；换模型时按新条目的 `service` 重算（不能把上一家的头带过去），显式头始终覆盖服务默认头。默认服务没有登记头，所以除 OpenCode 之外的会话**一个多余的头都不会发**——这条由 `test_other_services_get_no_extra_headers` 钉住。
+
+`{run}` 在**会话创建时**固化（`Session.connect`），不是每个 Provider 展开一次：摘要会新建 Provider，若各带一个 id，网关会把摘要路由到没缓存的机器——实测同一段前缀的 `cache_read` 从 18,560 掉到 0（见 `problem.md`）。
+
+为什么不给 OpenCode 单独写一个适配器：它和 `openai_compat` 的线上形状一模一样（同一个 `/chat/completions`、同一套 `delta` / `finish_reason` / `usage` 映射），差别只有 base_url 与一个必需请求头，两件都是数据。判据是「要不要新写翻译代码」，见 `ai/docs/design.md` 的 `SERVICE_HEADERS` 一节。
+
 ## 4. 模块职责
 
 | 文件 | 职责 |
 | --- | --- |
 | `config.py` | 从 JSON 配置文件、环境变量与 CLI overrides 读 key、`base_url`、模型名，产出 `Settings`（`ModelSpec` + key）；不做网络 |
-| `session.py` | 建池、建 Provider、建 `Agent`；装配 `LoopConfig.system`（含项目规则文件）与 `AgentHooks`；会话文件的创建、恢复与链式落盘；超预算时触发压缩并重建 `Agent` |
+| `session.py` | 建池、建 Provider、建 `Agent`；装配 `LoopConfig.system`（含项目规则文件）与 `AgentHooks`；会话文件的创建、恢复与链式落盘；超预算时触发压缩并重建 `Agent`；持有后台任务表与定时任务表，把两者的结果转成消息或一轮对话 |
 | `context.py` | token 估算（CJK 加权、真实 usage 做锚点）、压缩切点、旧消息摘要；不读写会话文件 |
 | `retry.py` | 运行级重试策略：同模型重试、退避、判断哪些 `AgentError` 值得重跑；不换模型 |
+| `background.py` | 后台命令：任务表、独立 asyncio task、日志落盘、并发与存活上限；完成时回调 `Session`，不直接碰对话 |
+| `schedule.py` | 定时任务：五段式 cron 解析与匹配、任务状态流转（待交付 / 重试上限）、`schedules.json` 原子读写；不启动运行，"到点谁来跑"由上层决定 |
+| `tasks.py` | 任务图：节点与 `blocked_by` 依赖、认领与解锁、环检测、`tasks.json` 原子读写；不启动运行，"谁去跑节点"由上层决定 |
+| `multiagent.py` | `Subagent` 与 `AgentTeam`：把就绪节点派给空闲子 agent，`ephemeral` / `persistent` 两种生命周期；建会话的函数与事件回调由上层注入 |
 | `registry.py` | 工具装配：`ToolRegistry` 按名字去重、保持顺序；`ToolCatalog` 按 `direct` / `deferred` / `hidden` 分组；`FunctionTool` 把普通函数适配成 `AgentTool` |
 | `mcp.py` | 读 `.gradus/mcp.json`（含项目信任）、连 MCP server（stdio / Streamable HTTP）、把远端工具投影成 `AgentTool`、单 server 失败隔离 |
 | `oauth.py` | MCP 的 OAuth 支撑：token 文件存储、本地回调页、带 `auth` 的 HTTP 客户端 |
@@ -62,7 +74,10 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 | `permissions.py` | 按工具名 + 路径 / 命令前缀判断放行、拒绝还是询问；工具结果截断与脱敏 |
 | `tools/files.py` | `read_file` / `list_dir` / `write_file` / `edit` |
 | `tools/search.py` | `grep`（内容）/ `glob`（路径）；跳过常见忽略目录，扫描在线程里跑 |
-| `tools/shell.py` | `bash` / `powershell`；只在解释器存在时注册，命令在 workspace 内执行 |
+| `tools/shell.py` | `bash` / `powershell`；只在解释器存在时注册，命令在 workspace 内执行；`run_in_background` 转交 `background.py` |
+| `tools/background.py` | `check_background`：只读后台任务表，列任务或读单个任务的输出尾部；从不启动或取消任务 |
+| `tools/schedule.py` | `schedule_task` / `manage_schedules`：增删查定时任务；只动任务表，不执行任务 |
+| `tools/tasks.py` | `create_task` / `update_task` / `list_tasks` / `get_task` / `claim_task` / `complete_task`：只动任务图，派活由 `AgentTeam` 负责 |
 | `tools/tool_search.py` | `tool_search`：在任意来源的 `deferred` 工具里按名字 / 描述检索，登记给 `prepare_next_turn`；不执行选中的工具 |
 | `tools/codemode.py` | `codemode`：起子进程跑模型写的 Python，通过 JSON 桥调用已声明工具；脚本级一次确认 |
 | `tools/codemode_harness.py` | 子进程执行器：受限 builtins、AST 过滤、`tools.*` 代理；不 import gradus |
@@ -200,6 +215,8 @@ OAuth 登录（M12 续）：
 
 ### 5.5 执行环境（沙箱）
 
+> 思路、取舍与踩过的坑见 [`sandbox.md`](sandbox.md)；这一节是规格条目。**MCP server 在箱外**——它由 SDK 在宿主起进程、用当前用户权限；判据、后果与已有的几道闸见 `sandbox.md` §4.1–4.4。
+
 命令与 `codemode` 不直接起进程，而是拿一个 `Environment`（`sandbox.py`）：
 
 - 缺省值是 `auto`：按 `restricted` -> `appcontainer` -> `docker` -> `local` 的顺序挑第一个可用的；一个都没有时回落 `local`，并用 `sandbox_warning` 说明原因；
@@ -242,7 +259,14 @@ OAuth 登录（M12 续）：
 - 只在 Windows 可用；`problem()` 给出原因时同样按「禁用命令类工具 + 告警」处理；
 - **不阻断网络**，也没有 `sandbox_network` 开关；CLI 横幅固定写 `network NOT isolated`；
 - 受限 SID 清单只放合成 SID、logon SID 与 `Everyone`，**不能放当前用户 SID**——那会把用户能写的位置全部放行。清单里只有合成 SID 时进程起不来（`0xC0000142`，DLL 初始化失败）；补上 logon SID 与 `Everyone` 后正常（没有单独拆验是哪一条必需）；
-- 合成 SID 没在系统里注册，`icacls *<SID>` 报 1332（no mapping）；授 / 撤 ACE 走 PowerShell 的 `Get-Acl` / `Set-Acl` 配 `SecurityIdentifier` 对象；
+- 合成 SID 没在系统里注册，`icacls *<SID>` 报 1332（no mapping）；授 / 撤 ACE 走 ACL 对象 API
+  （`DirectoryInfo.GetAccessControl()` / `SetAccessControl()`），既不用 `icacls`，也不用
+  `Get-Acl` / `Set-Acl`——前者依赖 PowerShell 模块（5.1 配上 PS7 的 `PSModulePath` 会加载失败），
+  后者在受保护 DACL 的目录上要求 `SeSecurityPrivilege`，见 `sandbox.md` §7；
+- scratch 与副本目录**不用 `tempfile.mkdtemp`**：它在 Windows 上建出的是受保护 DACL 目录
+  （只授 `OWNER RIGHTS` / SYSTEM / Administrators），受限令牌读不到里面的文件，`codemode`
+  会因此报 `script exited without a result`；用普通 `mkdir`（继承 `%TEMP%` 的 ACE）即可，
+  见 `sandbox.py` 的 `_private_dir`；
 - logon SID 指向 `GetTokenInformation(TokenGroups)` 缓冲区内部，不能 `LocalFree`，否则进程堆损坏（`0xC0000374`）；
 - ACE 只落在副本与 scratch 上，两者随会话删除，所以没有 profile、没有 `acl-grants.json`，`--reset-sandbox` 不需要处理它；`aclose` 仍先撤 ACE，避免合并失败保留副本时留下能写的目录；
 - 副本所在位置必须让受限 SID 可写：`%TEMP%` 被重定向到 `C:\Windows\Temp` 这类目录时，父目录的 traverse 只对登录用户开放，写会被拒（IDE 终端里就是这样，实机测试要先把 `TEMP` 指到用户临时目录）；
@@ -290,7 +314,8 @@ uv run gradus --reset-sandbox                            # 怀疑授权 / profil
 | --- | --- | --- | --- |
 | 受限 SID 清单必须含 logon SID 与 `Everyone`，且不能含当前用户 SID | 只有合成 SID 时 DLL 无法初始化；含用户 SID 则用户能写的位置全部放行 | 进程立刻退出（`0xC0000142`）或写边界失效 | `test_cwd_and_relative_paths`、`test_reads_and_writes_outside_are_denied` |
 | logon SID 不能 `LocalFree` | 它指向 `GetTokenInformation` 缓冲区内部 | 进程堆损坏（`0xC0000374`），`aclose` 时崩溃 | `test_sandbox.py` + 实机关闭会话 |
-| 合成 SID 的 ACE 用 `Set-Acl`，不要用 `icacls *SID` | 未注册的 SID 让 icacls 报 1332 | 授权失败，副本不可写 | 实机 `test_cwd_and_relative_paths` |
+| 合成 SID 的 ACE 用 ACL 对象 API 加，不要用 `icacls *SID`、也不要用 `Get-Acl` / `Set-Acl` | 未注册的 SID 让 icacls 报 1332；`Get-Acl` 依赖模块、`Set-Acl` 在受保护 DACL 上要 `SeSecurityPrivilege` | 授权失败，副本不可写 | 实机 `test_cwd_and_relative_paths` |
+| 沙箱目录（scratch / 副本）不能用 `tempfile.mkdtemp` 建 | 它建出受保护 DACL 目录，受限令牌读不到 | 命令读不到 scratch 里的脚本，`codemode` 报 `script exited without a result` | 实机 `test_codemode_runs_in_the_copy` |
 | 副本必须直接位于临时目录下一层 | AppContainer 进程在更深目录里设不了工作目录 | PowerShell 退回 `C:\`，`Test-Path .` / 相对路径全部失败 | `test_backend_and_copy_location`、`test_cwd_and_relative_paths` |
 | 命令里删文件只能用 `[IO.File]::Delete`；文件删除用 `delete_file` | `Remove-Item` / `cmd del` 在 AppContainer 里被平台拒绝，授 `M` / `F` / `DE,DC` 都不行；`delete_file` 走宿主进程 | 模型 `rm` 失败，删除类操作整体不可用 | `test_delete_works_through_dotnet`、`test_delete_file_tool_removes_on_host` |
 | worktree 必须另外带进未跟踪文件 | `git worktree add` 只检出 HEAD，`.env`、本地脚本不在任何 commit 里 | 模型看不到这些文件，命令报路径不存在 | `test_existing_and_untracked_files_are_visible` |
@@ -312,7 +337,256 @@ await one.aclose()       # 先合回宿主，再撤销授权 / 销毁容器，�
 one.workspace_sync       # 合回结果：applied / deleted / error / kept
 ```
 
-约定之外的事不要做：不要手工 `icacls` 授整棵树、不要自己找 `%TEMP%` 下的副本、不要在关闭后访问副本、不要把 `restricted` 当成会断网的沙箱、不要把文件工具指回宿主根、不要在别的会话还在跑时删 AppContainer profile、不要假设 MCP server 在沙箱里执行（只有 stdio server 的缺省 cwd 跟着副本走）。
+约定之外的事不要做：不要手工 `icacls` 授整棵树、不要自己找 `%TEMP%` 下的副本、不要在关闭后访问副本、不要把 `restricted` 当成会断网的沙箱、不要把文件工具指回宿主根、不要在别的会话还在跑时删 AppContainer profile、不要假设 MCP 服务器在沙箱里执行（只有 stdio server 的缺省 cwd 跟着副本走）。
+
+### 5.6 后台命令
+
+`bash` / `powershell` 的 `run_in_background` 把命令交给 `background.BackgroundTasks`：
+
+- **启动是 shell 的参数，不新增工具**：解释器选择在注册期已定（有没有 bash、是不是 Windows），另起一个 `background_run` 会把注册期的知识搬回参数里。
+- **占位结果就是这个调用的真实返回值**：模型问的是「把它跑起来」，答案是「已启动，任务号是 …」。它是一条正常的 `ToolResultMessage`，`tool_use` 当轮完成配对。
+- **完成通知是一条 `UserMessage`**，`origin="harness"`，内容为 `<task_notification>` 块。不能复用 `ToolResultMessage`：那个 `tool_use` 已经被占位结果应答，协议只允许应答一次。
+- **两条通道，互不替代**：
+  - 运行中完成 → `Session._notify` → `Agent.notify` → 当前运行的 steering 队列 → 下一轮请求前注入；
+  - 运行外完成 → 暂存在 `Session._notices` → 下一次运行开头合并成一条补送；
+  - 任务还在跑、模型想先看进度 → `check_background` 工具。
+
+生命周期与上限：
+
+| 东西 | 寿命 | 备注 |
+| --- | --- | --- |
+| 任务表 / 日志 | 会话 | 日志在 `<workspace>/.gradus/background/<id>.log`，不进入对话历史 |
+| 完成通知 | 单次运行（`Agent` 队列） | 与 `steering` 同 drain 点，不跨运行泄漏 |
+| 已在跑的任务数 | — | 上限 4，超出直接报错而不是排队（排队对模型不可见） |
+| 单命令存活 | — | 上限 30 分钟，超时算 `killed` 并照发通知，保证「开始过的任务一定回来」 |
+| 保留日志数 | 会话 | 上限 50，超出删最旧的已完成任务 |
+
+日志是**边读边写**的：头部 64KB 直接落盘，之后只在内存里维护 256KB 尾部缓冲，
+中间部分只记 `… N chars omitted …`。所以进程内存不随命令输出增长，日志文件也不会
+超过约 320KB；通知与 `check_background` 取的都是这份尾部。
+
+关闭顺序：`background.aclose()` 必须排在 `workspace_copy.sync()` 之前——后台命令还在往沙箱副本里写，先合回会丢产物。
+
+`abort()` 不杀后台任务：它取消的是一次运行，不是会话；任务继续跑，结果留在日志里。
+
+### 5.7 定时任务
+
+分四层，均已实现：
+
+| 层 | 内容 | 状态 |
+| --- | --- | --- |
+| `schedule.py` | cron 解析与匹配、任务状态流转、`schedules.json` 原子读写 | 已实现 |
+| `Session` | `take_due(moment)` 标记到点任务；`pending_jobs()` 给出待交付队列；`prompt_scheduled(job)` 跑一轮并把结果反馈给任务表 | 已实现 |
+| 驱动 | `host/serve.py` 的 `Connection.clock`：每秒 `take_due`，会话空闲时 `create_task(run_scheduled)`；切会话与关闭时停表 | 已实现（仅 Web 端） |
+| 工具 | `schedule_task` / `manage_schedules` | 已实现 |
+
+关键约定：
+
+- **状态先落盘再运行**：`due()` 先写 `pending_delivery` 与 `last_fired`，进程在「到点」和「跑完」之间退出时不会丢任务；
+- **销账放在首个 `TurnEnd`**：模型产出了一轮就算被接收，之后再失败也不重跑（至少一次）；
+- **失败有上限**：`fail()` 累计到 `max_attempts` 后清掉待交付，避免模型不可用时每秒重试；
+- **取消不计数**：取消的运行既不 `ack` 也不 `fail`，任务保持待交付，下一次 tick 重新点火；
+- **定时提示词用 `origin="harness"`**：否则会话文件与压缩摘要会把它当成用户发言；
+- **看表与跑必须分开**：看表循环里只做标记与 `create_task` 点火，绝不 `await` 整个运行，否则长任务会吞掉后面到点的任务。
+
+已知边界：
+
+- 时钟只在 Web 宿主里跑。CLI 的 `input()` 是同步阻塞，会停住事件循环，定时任务在那里不会响；
+- 每个连接各自持有一份 `Schedule` 内存快照，多个连接开同一个 workspace 时可能重复触发同一条任务（各写各的 `schedules.json`）。要支持多标签页需加文件锁或读前重载。
+
+与后台任务的区别：后台任务产出**一条消息**，定时任务产出**一整轮对话**；前者的载体是 `BackgroundTasks` 的进程，后者是 `Session.prompt_scheduled`。
+
+### 5.8 多 agent 协作
+
+任务图决定"做什么、先后"，子 agent 负责"做"；**派活的时机由模型决定**（`spawn_agent`），宿主不扫描图、不做调度：
+
+| 层 | 内容 |
+| --- | --- |
+| `tasks.py` | `Task` / `TaskGraph`：建节点、连边（防自依赖、防环、防悬空引用）、`claim` / `complete`（返回刚解锁的下游）、`ready`、`tasks.json` 原子读写 |
+| `tools/tasks.py` | 六个工具：`create_task` / `update_task` / `list_tasks` / `get_task` / `claim_task` / `complete_task` |
+| `multiagent.py` | `Subagent` + `AgentTeam`：认领并起跑、`wait` 等结果、`close` 收尾、消息投递 |
+| `bus.py` | 点对点消息：地址是 agent 名，内存 ring buffer 留痕，投递复用 `Session.notify` |
+| `tools/multiagent.py` | `spawn_agent` / `wait` / `list_agents` / `send_message` / `close_agent` / `interrupt_agent` |
+| `Session.spawn` | 给子 agent 建会话：同一 workspace 与执行环境，独立对话与工具实例 |
+| `host/serve.py` | 只负责时钟（定时任务）与创建团队；派活不在宿主里发生 |
+
+关键约定：
+
+- **两阶段建图**：模型先在一条回复里建完所有节点，再用返回的 id 连边。并行发出的工具调用无法互相引用返回值，这是协议限制，不是风格问题；
+- **派活是模型的显式动作**：`spawn_agent(task_id)` 认领节点、建好子会话、起跑后立即返回；图不会自己往前走，靠 `wait` 推进；
+- **认领必须原子**：`spawn` 里的 `claim()` 之前没有 `await`，单事件循环内即原子；
+- **结果沿边流动**：派活时把已完成前驱的 `result` 摘要拼进提示词，子 agent 之间不共享对话；
+- **子 agent 跑完不销毁**（对齐 Codex）：转为 idle 并保留会话，只有 `close_agent` 才关闭；`spawn_agent(ephemeral=true)` 可按节点要求一次性；
+- **结果与消息分两条路**：节点结果走 `wait` 的返回值（同时写回 `Task.result`），协作中的提醒走 `send_message`；投给 idle 的子 agent 会叫醒它跑一轮（`Session.continue_()`，不追加用户消息），否则消息永远躺在收件箱里；
+- **不设并发上限**：派活归模型，运行时不再叠一层常数闸；
+- **节点级模型**：`Task.model` 命中 `config.json` 候选表时，子会话换到该模型；命中不了就跟随主 agent；
+- **子 agent 会话落在 `<session_dir>/agents/<name>.jsonl`**，不进会话列表；同名不覆盖，追加 `-2` 后缀；
+- **子 agent 不持有环境所有权**：共用主 agent 的执行环境，关闭时只释放自己的后台任务表。
+
+子 agent 的工具面是裁剪过的：**没有任务图工具，也没有多 agent 工具**——它只做自己那一个节点，既不能改图，也不能无限派生下一层。
+
+已知边界：子 agent 不连 MCP、不读项目规则文件；图不会自动推进，模型若派活后不 `wait`，就要等下一次交互；共享工作区下两个并行节点写同一文件会互相覆盖。
+
+细节与参考实现对照见 `multi_agent.md`，取舍理由见 `multi_agent_decisions.md`。
+
+### 5.8.1 技能（Skill）：两段式披露与双根目录
+
+技能是**只读的知识包**：一份 `SKILL.md` 加可选资源目录。它不注册工具、不改工具面，
+模型看得到「有哪些」，需要时按名取「某一份的全文」。
+
+**两个根目录**
+
+| 根 | 何时加载 | 可放什么 | 典型内容 |
+| --- | --- | --- | --- |
+| `~/.gradus/extensions/`（用户级） | **总是**，不需要信任 | `skills/` `commands/` | 个人习惯：发版流程、评审清单 |
+| `<workspace>/.gradus/extensions/`（项目级） | 仅当项目已信任 | 额外可放 `tools/` | 项目专属约定、构建方式 |
+
+用户级是「客户端自己的东西」：技能不该为了跨项目复用先提交进别人的仓库。
+它**不执行工具代码**——项目级扩展靠信任门控，用户级没有这道闸，所以只放文本类扩展。
+
+**同名冲突：用户级优先**，并给出一条警告点名被遮住的项目级路径。项目内容来自别人，
+不能覆盖你自己定义的技能；项目确有专属流程就换个名字。这与 `config.json` 的「项目覆盖用户」
+相反，是故意的。
+
+**两段式披露**
+
+| 段 | 放什么 | 位置 |
+| --- | --- | --- |
+| 索引 | `- name: description`（描述截断到 200 字符；名字永不裁剪） | 系统提示 |
+| 正文 | 去 frontmatter 的全文，包在 `<skill name="…">` 里 | `use_skill(name, offset=0)` 的返回值 |
+
+`use_skill` 是**常驻工具**（索引已经告诉模型有这些技能，工具却要再搜一次自相矛盾）。单次返回
+8,000 字符，超出时提示用 `offset` 续读；未知名字报错并列出可用技能。索引里**不带路径**——
+路径留给工具，带路径只会诱导模型绕过工具去 `read_file`。
+
+用户入口保留：`/skill:name 参数` 把正文展开进用户消息（支持 `$ARGUMENTS`）。两条入口都记一次使用：
+`Session.skills_used`，只在内存，暂不落盘（会话文件目前有五种记录，加第六种要改格式版本）。
+
+**frontmatter**：`name`（可选，缺省目录名，`^[a-z0-9-]+$`，≤64 字符）、`description`
+（必填，≤1024 字符，缺失或超长→警告并跳过）、`disable-model-invocation`（可选，默认 false）。
+资源目录 `references/` `scripts/` `templates/` 是约定，**不自动列清单**——需要时模型自己用
+`grep`/`glob`/`read_file` 翻。
+
+设了 `disable-model-invocation: true` 的技能**只允许用户触发**：不进模型索引（列出来却调不动，
+只会让模型白试一次），`use_skill` 调它会报错并提示「只能由用户 `/skill:名字` 启动」，
+`/skill:` 本身照常可用。典型用途：生产部署、批量删除这类需要人明确点头的流程。
+
+**沙箱**：扩展从**宿主**工作区加载（`.gradus/` 被 `workspace.COPY_SKIP` 排除，副本里没有扩展
+目录），`use_skill` 读的也是宿主那份；有回归测试钉住「别改成 `tool_root`」。
+
+**明确不做**：用户级工具代码、`allowed-tools`（六家里只有 reasonix 真做）、自动路由
+（triggers）、资源自动列清单、按技能改工具集。调研与对比见 [skill_reference.md](skill_reference.md)。
+
+**已知取舍**：索引在系统提示里，任意技能增删都会让前缀缓存失效（与 §5.9 的缓存考量同源）。
+
+### 5.9 工具使用准则与写入排队
+
+**准则放系统提示，不放 description。** 每个工具的 `description` 只讲「是什么、参数怎么填、有什么上限」；
+「什么时候该用它」集中写在 `BASE_PROMPT` 的 `Tool use:` 段里，一行一条：
+
+| 准则 | 解决什么 |
+| --- | --- |
+| 先 grep/glob 定位，再用 offset/limit 读区间 | 整读大文件把上下文一次撑爆 |
+| `write_file` 覆盖整文件，小改用 `edit`；改前先读 | 用写覆盖掉没读过的内容 |
+| shell 输出用 head/tail/grep 过滤，不用来看文件 | 命令输出成为上下文里最大的一块 |
+| 多步工具调用写成 `codemode` 脚本 | 来回调用比一段脚本贵 |
+| `recall_history` 取回被压缩掉的原文 | 压缩之后「想不起为什么这么改」 |
+| 只读可并行，写与相互依赖的串行 | 并行批次里互相覆盖 |
+| 改完要跑测试/命令验证 | 只改不验，把问题留给用户 |
+
+理由与 Pi 一致：`description` 是给参数校验器和「这工具能干什么」用的，行为策略集中一处才好维护
+（Pi 用 `promptSnippet` + `promptGuidelines` 合进系统提示，形态不同，分工相同）。
+
+**同一路径的写操作排队。** 读写都走 `asyncio.to_thread`，「读-改-写」之间存在真实让出点：
+并行批次里两个调用改同一个文件时，后写的会覆盖前一个的结果。`PathLocks` 按解析后的绝对路径
+发一把 `asyncio.Lock`，`write_file` / `edit` / `delete_file` 在锁内完成各自的读改写
+（对应 Pi 的 `withFileMutationQueue`）。表的大小被「一次会话里碰过的不同路径数」限住。
+
+已知边界：锁只在**进程内**有效。两个 Gradus 进程改同一个工作区时仍会互相覆盖——那是跨进程锁的事，
+不在这一层。
+
+**工具分层（常驻 vs 按需）。** 常驻 13 个：`read_file` / `write_file` / `edit` / `delete_file` /
+`grep` / `glob` / 命令（`bash` 或 `powershell`）/ `check_background` / `recall_history` / `codemode` /
+`create_task` / `wait` + `tool_search`（有按需工具时自动出现）。编排类的其余 12 个
+（`update_task` / `list_tasks` / `get_task` / `claim_task` / `complete_task` / `spawn_agent` /
+`list_agents` / `send_message` / `close_agent` / `interrupt_agent` / `schedule_task` /
+`manage_schedules`）默认不声明，由 `tool_search` 按需载入。
+
+| | 常驻工具 | 常驻 schema | 每请求代价 |
+| --- | --- | --- | --- |
+| 治理前 | 25 | 12,968 字符（≈4.3k token） | 每请求都付 |
+| 治理后 | 13 | 8,075 字符（≈2.7k token） | 省约 1.6k token/请求 |
+
+为什么留 `create_task` 与 `wait`：「这件事要拆开做」的第一步和拆完等结果是必然动作，藏起来
+会让模型在两个最常用的编排动作上先撞一次墙。`check_background` 也留常驻，因为命令工具的
+`run_in_background` 描述直接指向它。
+
+代价要说清：编排工具的可发现性只剩「系统提示里那一句 + `tool_search` 的检索质量」。
+
+**检索（学 Pi，另加中文）**：`tool_search` 用 **BM25**（k1=1.2、b=0.75），检索文档是
+「工具名 + 下划线换空格的名字 + 描述 + 参数 schema 里的字段名与描述」；分词拆驼峰与下划线、
+去停用词、简单复数词干化——这三件是 Pi `extensions/tool-search/tool.ts` 的做法。两处偏离
+（Pi 的分词器只认 `[a-z0-9]`，中文会被整段丢掉）：
+
+| 偏离 | 原因 |
+| --- | --- |
+| 中文按 **2-gram** 切（「标记任务完成」→ 标记/记任/任务/…） | 中文没有空格，整句会变成一个 token，只有切开才可能对上英文元数据 |
+| 小型**双语同义词表**（任务→task、子代理→agent、定时→schedule…） | 工具元数据是英文的，中文查询需要一个落点；表小可审计，不用向量库 |
+
+离线评测（12 个按需工具，22 条中英混合查询）：
+
+| 实现 | hit@1 | hit@3 | MRR | 中文查询 |
+| --- | --- | --- | --- | --- |
+| 旧：空格切词 + 子串计数 | 36% | 36% | 0.36 | 14 条全部零命中 |
+| 新：BM25 + 2-gram + 同义词 | **91%** | **100%** | **0.95** | 全部命中 |
+| 新实现，池子扩到 72 个（+60 个合成 MCP 工具） | 86% | 95% | 0.92 | 仍全部命中 |
+
+池子只有 12 个工具时 IDF 的作用有限——真正拉开差距的是**分词能不能把中文落到英文词上**。
+规模变大后指标略降（干扰项变多），但没有塌。无关查询（「天气怎么样」「数据库迁移脚本」）
+零命中，不误加载。
+
+分词与 BM25 抽在 `coding/retrieval.py`，**`recall_history` 用同一套**（它原来也是空格切词 +
+子串计数，中文按关键词找不回原文）。两处的区别只在文档构造：`tool_search` 的文档是工具
+元数据（名字 + 描述 + schema 字段），`recall_history` 的文档是被压缩掉的消息正文。
+
+**零命中不给「没找到」，给目录。** 检索猜不中时返回全部可加载工具的名字 + 一句话（`MAX_INDEX`
+截到 30 个，MCP 池子可能上百），并提示用 `tool_search(load=["名字"])` 加载。目录只是**列出**，
+不加载——加载要进下一轮的 tools 数组、按完整 schema 计费：12 个工具的 schema 是 4,988 字符
+（≈1,660 token），而目录只要 ≈430 token 且只花一次。
+
+`load` 按名字精确加载，不经过分词：**名字是稳定标识，中英文都不影响**。有了它，同义词表从
+「生死攸关」降级成「影响排序」——猜不中也只是多一轮。
+
+`recall_history` 的分词结果按 `(条目 id, 正文长度)` 缓存：已压缩的消息只追加、内容不变，键稳定；
+区段几万字符时省掉重复分词（首次几十毫秒，之后基本为零）。
+
+召回（`recall_history`）的完整说明——两条路径、预算、分词与片段的坑、兜底链、已知限制——见单独的
+[recall.md](recall.md)。这里只记与工具面相关的部分。
+
+**零命中的第二层兜底：小窗口选择器**（`coding/selector.py`，`selector` / `GRADUS_SELECTOR`，
+默认开）。关键词**零命中**时再开一次独立请求：只给它「候选清单（id + 前 80 字，封顶 30 条）+
+查询」，让它回 `{"ids": [...]}`，然后走已有的按 id 读取。它不读主对话、不带工具、不共享前缀缓存。
+
+| 项 | 值 |
+| --- | --- |
+| 触发条件 | 只在关键词零命中时；命中时一次都不调 |
+| 次数上限 | 一次 `recall_history` 最多一发，不递归（挑不出来就返回「没命中」） |
+| 输入 | 约 300 token（8–30 条候选 + 查询） |
+| 输出 | 50–250 token，`max_output_tokens=600`、`temperature=0` |
+| 挑选上限 | `MAX_PICKS = 4`（挑多了会吃掉 recall 的读取预算） |
+| 失败处理 | 解析失败/超时/异常一律返回空结果，绝不抛给调用方 |
+| 用量 | `Session._selector_usage`，事后可查这次 recall 花没花额外的钱 |
+
+真机实测（8 条历史、5 条精心构造的查询，其中 3 条关键词本来就命中）：**5/5 挑对**。典型例子
+「别引额外的中间件」→ 挑到「缓存层用进程内 LRU」（关键词零命中）；「刚才测试跑得怎么样」→
+关键词误命中 e4，选择器给了 e5。
+
+已知限制有两条：**只在零命中时触发**——「命中但答错」这种情况它不会介入（上例里生产路径会给
+e4）；**同一个模型给自己当裁判**，质量取决于模型这一轮。真要改，是把「是否命中」换成置信度
+阈值，那需要先有打分分布的数据，暂不做。
+
+目录列举并进了 `glob`：`list_dir` 已删除，用 `glob(pattern="*", mode="dirs")` 列一层、
+`glob(pattern="**/*", mode="dirs")` 递归列目录——少一个工具、少一份 schema，行为不变。
 
 ## 6. 权限
 
@@ -320,7 +594,7 @@ one.workspace_sync       # 合回结果：applied / deleted / error / kept
 
 已定：`before_tool_call` 是 async hook，需要确认时直接 `await` 一个注入的确认回调即可，不阻塞事件循环。
 
-默认策略：只读工具（`read_file` / `list_dir` / `grep` / `glob` / `tool_search` / `list_mcp_resources` / `list_mcp_resource_templates` / `read_mcp_resource` / `codemode`）放行；写工具（`write_file` / `edit` / `delete_file`）与命令（`bash` / `powershell`）询问；敏感路径（`.env*`、`*.pem`、`id_rsa*`、`.git/*`）和危险命令（`rm -rf`、`sudo`、`git push --force`）直接拒绝；写越界走询问。白名单先按工具名，参数级规则覆盖路径与命令前缀。`codemode` 只放行脚本运行器本身，脚本内的写与命令由 `CodemodeTool` 按同一策略逐次判断、整段脚本只确认一次。扩展工具默认落在「未知工具」分支，按询问处理。
+默认策略：只读工具（`read_file` / `list_dir` / `grep` / `glob` / `tool_search` / `check_background` / `manage_schedules` / `create_task` / `update_task` / `list_tasks` / `get_task` / `claim_task` / `complete_task` / `list_mcp_resources` / `list_mcp_resource_templates` / `read_mcp_resource` / `codemode`）放行；写工具（`write_file` / `edit` / `delete_file`）与命令（`bash` / `powershell`）询问；`schedule_task` 落在「未知工具」分支按询问处理——新建定时任务会在无人值守时跑一整轮，值得先确认。敏感路径（`.env*`、`*.pem`、`id_rsa*`、`.git/*`）和危险命令（`rm -rf`、`sudo`、`git push --force`）直接拒绝；写越界走询问。白名单先按工具名，参数级规则覆盖路径与命令前缀。`codemode` 只放行脚本运行器本身，脚本内的写与命令由 `CodemodeTool` 按同一策略逐次判断、整段脚本只确认一次。扩展工具默认落在「未知工具」分支，按询问处理。
 
 ## 7. 会话与历史
 
@@ -329,17 +603,31 @@ one.workspace_sync       # 合回结果：applied / deleted / error / kept
 - 第一行是 `{"type":"session","version":1,"id","model","workspace","created_at"}`；
 - 之后每行 `{"type":"message","id":"e1","parentId":null,"message":...}`；当前只写线性链，叶子是最后一条；
 - 恢复时从叶子沿 `parentId` 回溯到根；文件里若已有分叉，以最后一行为叶子；
-- 压缩时追加 `{"type":"compaction","id","parentId","summary","firstKeptEntryId"}`；原消息不删，只在恢复时按最后一次压缩重放「摘要 + `firstKeptEntryId` 之后的原文」。
+- 压缩时追加 `{"type":"compaction","id","parentId","summary","firstKeptEntryId"}`；原消息不删。**压缩不替换历史**：`SessionFile` 只记一条状态（摘要 + `firstKeptEntryId`），模型看到的视图由 `context.project_view` 派生；运行中与恢复后走同一个函数。
 
 `Session.prompt` 在 `AgentDone` 时把 `new_messages` 追加到文件。恢复时校验 entry `id` 唯一、`parentId` 无缺失、压缩引用的 entry 存在，并要求 `ToolCallBlock` 与 `ToolResultMessage` 一一对应；不满足直接拒绝启动。
 
-上下文预算在每轮 `prompt` 开始前检查，不在运行中改历史：
+上下文预算在轮次开始前与轮次收尾各检查一次，都不在运行中改历史：
 
-- 估算：宽字符（CJK / 假名 / 谚文）按 1 字 1 token，其余按 3.5 字符 1 token；最近一条成功 assistant 的 `usage`（`input_tokens + output_tokens`）做锚点，只估算它之后的消息；估算口径不追求精确，准确性由锚点与溢出错误兜底；
-- 触发：`tokens > context_window - 16384`；
-- 切点：从末尾往前累加，取最早一个仍在 20000 token 内的 `user` 消息；只切在 user 处，工具调用与结果不会被拆开；
-- 摘要：用同一模型、同一连接池发一次独立请求，不写入会话历史；失败只放弃本次压缩，不打断当前轮次；
-- 重建：压缩后用 `Agent.connect(messages=[摘要, *保留原文])` 重建 `Agent`，工具、`FileTracker`、权限策略沿用原实例。
+- 收尾那次不能省。只在开头检查的话，本轮新增的内容要等下一次请求才被算进去，而那时
+  `transform_messages` 的兜底裁剪已经先把旧消息丢了：现象是「没报错、也没压缩」，历史却在
+  悄悄变短。收尾时检查，本轮的全部消息都已经在历史里，压缩才有东西可折；
+- 窗口从哪来：**模型的物理上限**（`ai.models` 的三层来源：显式配置 > `GET {base}/models`
+  元数据（`probe_limits`，默认关）> 实测过的静态表 > 默认 128k）。配置里显式写的
+  `context_window` 只能**往下压**，超过已知上限会被收敛到上限（超了只会换来一次 400）。
+  窗口能力与预算口径分开放：`spec.window_limit` 是能力，`spec.context_window` 是预算；
+- 输出上限反过来：`max_output_tokens` 会原样进请求，模型支持 384k 不代表每次都要 384k，
+  所以缺省仍是保守值，能力单独记在 `spec.output_limit`；
+- 估算：宽字符（CJK / 假名 / 谚文）按 1 字 1 token，其余按 3.5 字符 1 token；**锚点绑在「请求」上**——记下每次真实请求的输入 token 与该请求包含的消息条数，之后只估算新增部分，压缩或裁剪后锚点清空，等下一次请求重新锚定；
+- 触发：`tokens > context_window - 预留`；预留为 `max(16384, max_output_tokens)`，按当前模型算；启动与换模型时都校验「保留量 < 触发线」，不满足直接拒绝；
+- 保留量按**触发线的比例**给：`clamp(ratio × 触发线, 下限, 上限)`，再被「触发线的一半」压一次。三个预设（`keep_preset` / `GRADUS_KEEP_PRESET`）：`conservative` (0.10/8k/24k)、`balanced` (0.25/12k/64k，默认)、`aggressive` (0.40/16k/120k)。固定值在小窗口下会大于触发线（压完原地打转），在大窗口下又只留 2%——窗口是买来的容量，按比例缩放才对得上；上限防止大窗口把单次请求的输入成本顶上去。显式 `context_keep_tokens` 仍然优先；
+- 切点：从末尾往前累加，取最早一个仍在保留量内的 `user` 消息；只切在 user 处，工具调用与结果不会被拆开；**当前这一轮不切**（`select_cut` 拿不到合法切点时返回空），所以压缩总是从第二轮起才可能发生；
+- 摘要：**重放主前缀**——把可见历史原样塞进请求，末尾追加一条「压缩成交接摘要」的用户消息；工具定义与系统提示也照发，这样这次调用是上一次真实请求的真前缀，provider 的提示缓存可以复用。摘要请求里出现工具调用即判失败；装不下时退回「拍成文本、另起请求」的兜底路径。失败只放弃本次压缩，不打断当前轮次；
+- 接受条件：摘要完的视图必须比压缩前**更小**才提交，否则宁可不动。压前压后都用**纯估算**比：`context_tokens` 会退回「最后一条带 usage 的 assistant」，那个数描述的是压缩**前**发出的请求，两边相等，压缩会被永远拒掉；
+- 安装：压缩后**不重建 `Agent`**，只把新的 `CompactionState`（摘要 + 完整历史里的起点）装进会话槽位；`transform_messages` 先投影再裁剪，`Agent` 内部历史始终完整；
+- 视图：`Session.messages` 是投影结果（摘要 + 保留段），`Session.history` 是完整历史。压缩不改前者以外的任何东西，`load()` 也只还原状态、不裁剪历史；
+- 请求前硬裁：`transform_messages` 里对**投影后的视图**按 user 边界丢弃头部整轮，并把「丢了多少条、约多少 token」记成一条 `{"type":"trim"}` 会话记录——静默丢弃会让「它为什么忘事」无从回答；
+- 换模型：`with_choice` 是**显式优先**——候选条目自己写了窗口/输出上限就用它，没写就沿用当前会话的口径，不退回默认值（否则「条目忘了写」和「条目写了默认值」长得一样，用户配的窗口被悄悄盖掉）。
 
 换模型：启动时由 `config` 选定；运行中需要换时，用 `Agent.connect(messages=...)` 重建 Agent，因为 Provider 的模型名在构造期固定。
 

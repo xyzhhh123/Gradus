@@ -98,6 +98,24 @@ class ToolCatalog:
         for tool in tools:
             self.add(tool, exposure)
 
+    def promote(self, tool: AgentTool) -> None:
+        """把已登记的工具从 `deferred` 提到 `direct`（之后才声明给模型）。
+
+        给「先按大类批量登记、再点名留几个常驻」用：编排工具整组按需加载，但
+        `create_task` / `wait` 这种两步必需的要常驻。
+        """
+        name = tool.spec.name
+        if name in (item.spec.name for item in self._direct):
+            return
+        self._deferred = [item for item in self._deferred if item.spec.name != name]
+        if not any(item.spec.name == name for item in self._deferred):
+            self._direct.append(tool)
+
+    @property
+    def all(self) -> tuple[AgentTool, ...]:
+        """全部分组的工具（按 direct / deferred / hidden 顺序）。"""
+        return (*self._direct, *self._deferred, *self._hidden)
+
     @property
     def direct(self) -> tuple[AgentTool, ...]:
         return tuple(self._direct)

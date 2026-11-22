@@ -108,6 +108,15 @@ agent 层     ->  base.py / types.py
 - M11 交接三项：A 适配器可注入 client（完成，D29）、B Anthropic 显式缓存断点（形状完成，D30）、
   C `prompt_cache_key` 透传（待办，等会话 id，见「未覆盖」）
 - 环境：`Gradus/pyproject.toml` + `uv.lock`，Python 3.13，运行依赖 httpx，dev 依赖只有 pytest
+- 追加（2026-11）：**模型能力层** `models.py` —— `VERIFIED_LIMITS` 静态表（只填实测过的）、
+  `limits_for` 归一化查表、`parse_limits` 兼容 `limit.{context,output}` 与平铺字段、
+  `fetch_limits` 探测 `GET {base}/models`（超时 2s、任何失败静默返回 `None`、不重试）；
+  `ModelSpec` 增加 `window_limit` / `output_limit`，把「能力」与「预算口径」分开
+- 追加（2026-11）：**自定义请求头** —— `base.expand_headers` 展开 `{run}` 占位符；
+  `create_provider(..., headers=)` 与四个适配器的 `_headers()` 合并；`transport` 自建 client
+  统一带 `User-Agent: gradus/<版本>`；`services` 增加 `opencode-go`（要 `x-opencode-session`），
+  并由 `SERVICE_HEADERS` 登记「选了这项就必须带」的头——**只对该服务生效**，别的会话一个头
+  都不多。决定不写 `opencode.py` 适配器：线上形状与 `openai_compat` 相同，差别只是数据
 - `README.md` / `README.zh.md`：对外入口（定位、快速开始、数据模型、目录与职责表），两份互链
 - `docs/design.md`（中文）：逐文件实现说明，从 README 拆出
 
@@ -122,9 +131,9 @@ agent 层     ->  base.py / types.py
   空 data 交付、无 data 记录跳过、`[DONE]` 原样、冒号后只剥一个空格
 - 传输：正常流派、429 后重试成功（2 次调用）、401 不重试、连接失败重试用尽（3 次调用）、
   非 UTF-8 字节不抛异常
-- `uv run python -m gradus.ai.tests.adapter`：130 passed
-  （anthropic 23 + fake 7 + gemini 20 + openai_compat 30 + openai_responses 21 +
-  record 4 + replay 10 + transport 14 + factory 1）
+- `uv run python -m gradus.ai.tests.adapter`：147 passed
+  （anthropic 23 + fake 7 + gemini 20 + models 13 + openai_compat 34 +
+  openai_responses 21 + record 4 + replay 10 + transport 14 + factory 1）
 - 缓存断点：system / 最后一个工具 / 最后一条消息各一个，`thinking` 跳过，总数 3；
   离线只验证形状，真实命中率待官方 key
 - client 注入：四种协议连续两次 `stream()` 都走注入的 client，结束后未被关闭；不注入时行为不变
@@ -152,6 +161,12 @@ agent 层     ->  base.py / types.py
 - `openai_responses` 的 reasoning item 已能解析成 `ThinkingBlock`，但**回传**（续推理）仍缺真实样本；
   录到的 Kimi 流里也没有 `encrypted_content`，`signature` 一直是 `None`（D22）
 - `gemini` 真实流待录（缺 key；`--url` 要带模型名），官方 Anthropic / OpenAI 端点也尚未验证
+- **能力探测只在 OpenCode Go 上实测过**：`/models` 的 `limit.{context,output}` 是它的扩展字段，
+  DeepSeek / Kimi / Moonshot 的 `/models` 不返回 limit，所以那些模型靠静态表或默认值。新增模型时
+  先 `curl {base}/models` 看一眼，再决定要不要进 `VERIFIED_LIMITS`
+- 自定义请求头目前只有 `x-opencode-session` 一个真实用例；`{run}` 的语义是「一次 Provider 实例内
+  稳定」，换成长期运行的宿主进程后，是否要按会话而不是按实例区分，等会话 id 落地再定
+  （与上面 `prompt_cache_key` 那条同一个前置条件）
 - 一条 assistant 消息里出现多个 `output_text` part 时是否该拆成多个 `TextBlock`，缺真实样本
 
 `agent` 层（不属于本层，列在这里免得上层重推）：

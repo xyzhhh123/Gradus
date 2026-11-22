@@ -131,7 +131,17 @@ ContentBlock = Union[TextBlock, ThinkingBlock, ToolCallBlock]
 
 @dataclass
 class UserMessage:
+    """用户侧消息。
+
+    `origin` 区分来源，不参与 wire：四家协议都只有 user 角色，适配器只读
+    `content`。需要区分的只有三处——UI 渲染、会话文件、压缩时的角色标注。
+
+    - `"user"`：人说的，默认值；
+    - `"harness"`：运行时注入，例如后台任务完成通知、压缩摘要。
+    """
+
     content: str
+    origin: Literal["user", "harness"] = "user"
 
 
 @dataclass

@@ -7,6 +7,7 @@ import type {
   SandboxInfo,
   SessionInfo,
   SessionStatus,
+  UsageTotalsWire,
   UsageWire,
 } from '../protocol/frames'
 
@@ -52,6 +53,8 @@ export interface SessionState {
   model: ModelSummary | null
   /** 后端报出的可选能力；旧后端或没带快照时为空数组。 */
   capabilities: string[]
+  /** 会话累计用量；后端还没推 `usage/state` 时为 `null`。 */
+  usage: UsageTotalsWire | null
   /** 可切换的模型；只有一个时界面不显示选择器。 */
   models: ModelInfo[]
   activeModelId: string | null
@@ -74,6 +77,7 @@ export function initialState(): SessionState {
     browseError: null,
     model: null,
     capabilities: [],
+  usage: null,
     models: [],
     activeModelId: null,
     pendingConfirm: null,

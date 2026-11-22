@@ -205,3 +205,86 @@
 - **解决**：受限 SID 清单改为「合成 SID + logon SID（`TokenGroups` 里 `SE_GROUP_LOGON_ID` 那条）+ `Everyone`」，且不放当前用户 SID（否则用户能写的地方全部放行）；ACE 改用 PowerShell `Get-Acl` / `Set-Acl` 配 `SecurityIdentifier` 对象，绕开 icacls 的名字解析；SID 分两类管——`ConvertStringSidToSidW` 分配的自己释放，logon SID 只保活它所在的缓冲区。
 - **验证**：`GRADUS_SANDBOX_LIVE=1 uv run python -m pytest gradus/coding/tests/test_sandbox_live.py -q -s` → 11 passed / 1 skipped（`restricted`，网络那条按后端跳过）；实机确认副本可写、`C:\Users\Public` 写被拒、`C:\Windows\win.ini` 可读。离线：`tests/test_sandbox.py::RestrictedBackendTest`。
 - **关联**：M16、`restricted.py`、`win32.py`、`design.md` §5.5 与 §5.5.1。另记一条环境限制：`%TEMP%` 被重定向到 `C:\Windows\Temp` 时受限进程写不进副本（父目录 traverse 只对登录用户开放），实机测试需把 `TEMP` 指到用户临时目录；`appcontainer` 反过来只认 `C:\Windows\Temp`。
+
+### 设置页保存模型报 `[Errno 13] Permission denied: '...config.json.tmp'`
+
+- **状态**：已解决（非代码缺陷，是启动环境的写限制）
+- **现象**：Web 设置页保存候选模型，界面回 `[Errno 13] Permission denied: 'C:\Users\<user>\.gradus\config.json.tmp'`，磁盘上的 `config.json` 没有变化；把服务改成 `--config <workspace>\.gradus\test-config.json` 重启后，同样的操作一次就成功。
+- **触发**：服务由**带受限写令牌的后台通道**启动（本项目 IDE 的后台命令通道即如此），而默认配置路径在用户主目录 `~/.gradus/config.json`。
+- **原因**：`save_models` → `_write_payload` 的写法是「先写 `config.json.tmp`，校验后 `os.replace`」。受限令牌只放行工作区写入，第一步 `temp.write_text()` 就 EACCES。报错名字是 `.tmp` 而不是 `config.json`，正说明卡在**创建临时文件**、没走到替换。对照实验（同一用户、同一目录）：前台 PowerShell `Set-Content` 成功、前台 `uv run python` 写成功、后台长驻进程写同一路径被拒，而该进程写工作区内的会话文件 / 后台日志 / `tasks.json` 一直成功——所以是进程令牌，不是 ACL。
+- **解决**：不改代码。要么起服务时用 `--config` 把配置放进工作区，要么从自己的终端启动（无写限制）。`save_models` 的原子写入保证失败时目标文件不动，所以配置不会被写坏。
+- **验证**：`settings/save` 连续三次复现失败；改 `--config` 到工作区后连续三次成功；`Get-Acl` 显示当前用户对 `~/.gradus` 是 FullControl。
+- **关联**：`config.py` 的 `save_models` / `_write_payload`、`host/serve.py` 的 `handle_settings_save`。
+
+### 受限令牌读不到 `tempfile.mkdtemp` 建的目录
+
+- **状态**：已解决
+- **现象**：`restricted` 后端能起来之后，`codemode` 一律失败，只回一句 `script exited without a result`（子进程 stderr 被 `_drain` 吞掉）；契约测试「读 workspace 外的文件」也报 `Access to the path '<...>\secret.txt' is denied`。
+- **触发**：环境 scratch 由 `tempfile.mkdtemp` 建；`codemode` 先把脚本写进 scratch，再让受限子进程去读它。
+- **原因**：`mkdtemp` 在 Windows 上建的是**受保护 DACL** 目录（SDDL 带 `D:P`，只授 `OWNER RIGHTS` / `SYSTEM` / `Administrators`）。沙箱子进程是 LUA 过滤令牌，`OWNER RIGHTS` 在这个令牌下匹配不上（令牌里 Administrators 是 deny-only），于是它读不到目录里任何文件——`codemode` 的脚本正是这么读不到的。普通 `mkdir` 继承 `%TEMP%` 的 ACE（含用户 SID 与 `Users`），读就正常。
+- **解决**：新增 `sandbox._private_dir()`——Windows 上在 `%TEMP%` 下用普通 `mkdir` + 随机名字建目录（POSIX 仍用 `mkdtemp` 的 0700 语义）；`create_scratch`、`appcontainer` 的 scratch 都改走它。契约测试的临时基座也从 `TemporaryDirectory` 换成普通目录，否则测的仍是受保护 DACL。
+- **验证**：`GRADUS_SANDBOX_LIVE=1 uv run python -m pytest gradus/coding/tests/test_sandbox_live.py -q` → 11 passed / 1 skipped；实测受限会话里 `codemode` 的 `text('hi')` 与 `tools.read_file` 都能跑；`tests/test_sandbox.py::ScratchLayoutTest` 固定「Windows 上不调 `mkdtemp`」。
+- **关联**：`sandbox.py` 的 `create_scratch` / `_private_dir`、`appcontainer.py`、`tests/test_sandbox_live.py::SandboxContractTest`。这一条同时修正上一条（`restricted 后端首次实机`）里「ACE 用 `Get-Acl` / `Set-Acl`」的说法，原因见下一条。
+
+### `Set-Acl` 在受保护 DACL 上要求 `SeSecurityPrivilege`
+
+- **状态**：已解决
+- **现象**：`restricted` 后端起来前就报 `ACL AddAccessRule failed on <dir> (exit 1)`，stderr 被吞成一句空话；把 stderr 捞出来后是两种：`the module could not be loaded`（`Get-Acl`）与 `does not possess the 'SeSecurityPrivilege'`（`Set-Acl`）。
+- **触发**：ACL 助手用 Windows PowerShell 5.1 跑 `Get-Acl` / `Set-Acl`，目标目录是 `mkdtemp` 建的受保护 DACL 目录。
+- **原因**：① 子进程继承 pwsh 父进程的 `PSModulePath`（PS7 目录），5.1 解析到 PS7 的 `Microsoft.PowerShell.Security` 加载失败；② 非提权令牌修改受保护 DACL 需要 `SeSecurityPrivilege`，普通进程没有。
+- **解决**：脚本整段不再调 cmdlet，改用 `[System.IO.DirectoryInfo]::GetAccessControl()` / `SetAccessControl()`（Win32 `SetSecurityInfo`，只要 `WRITE_DAC`）；`_acl` 仍给 5.1 子进程一份自己的 `PSModulePath` 作保险。
+- **验证**：同一目录 before/after SDDL 对照（`D:P(...OW)(...SY)(...BA)` → 多出会话合成 SID 的 `(OI)(CI)M`）；`tests/test_sandbox.py` 的 `test_acl_script_avoids_the_security_cmdlets` 与 `test_acl_helper_gets_windows_powershell_module_paths`。
+- **关联**：`restricted.py` 的 `_ACL_SCRIPT` / `_acl` / `_legacy_module_env`。
+
+### 真机上压缩从不触发，历史被兜底裁剪悄悄裁短
+
+- **状态**：已解决
+- **现象**：真机连跑六轮，每轮 `input_tokens` 一直停在同一个数（18,653），`cache_read` 也不涨，`Session.compaction` 始终是 `None`；会话没报错，模型的回答也很正常。看起来「上下文管理在工作」，实际是每轮都在 `transform_messages` 里把旧消息丢掉。
+- **触发**：真实模型、真实用量（每轮 `usage.input_tokens` 非零）下跑长会话；离线测试的假历史里 assistant 没有 `usage`，所以一直是绿的。
+- **原因**：两个叠在一起。
+  1. `_maybe_compact` 的接受条件用 `context_tokens(...)` 算压前压后，而它在没有锚点时**会退回「最后一条带 usage 的 assistant」**——那个数描述的是压缩**前**发出的那次请求。两边拿到同一个数，`after >= before` 恒成立，摘要算完也被丢掉。
+  2. 预算只在轮次**开始前**检查。那时候本轮的新消息还没进历史，等它进历史时，`transform_messages` 的兜底裁剪已经先一步把旧消息删了——压缩永远晚一步。
+- **解决**：接受条件两边都换成**纯估算**（`estimate_messages_tokens`），保证是同一个度量；`_run` 在轮次收尾再调一次 `_maybe_compact()`，那时本轮消息已全部落进历史，切点也终于可算（`select_cut` 不切当前轮）。
+- **验证**：真机 `scripts/verify_context_live.py` 全绿——3 轮后压缩发生，`view=3 / history=6`，视图首条是摘要标记，摘要命中七栏、1,001 token，`recall` 能取回被压掉的原文、拒绝仍在上下文里的条目，重启后视图与运行时逐条一致；同一次运行里 `cache_read=11,136`，证明追加历史确实在复用前缀。离线 `test_compaction_is_not_refused_by_the_last_request_usage`（去掉修复即失败）、`test_budget_is_checked_at_turn_start_and_end`。
+- **关联**：`session.py` 的 `_maybe_compact` / `_run`、`context.context_tokens` 的 usage 回退、`design.md` §7、`context_design.md` §5。
+
+### 摘要请求吃不到前缀缓存（`{run}` 按 Provider 实例生成）
+
+- **状态**：已解决
+- **现象**：主对话轮次之间缓存命中正常（`cache_read=11,136`），但**摘要那一次请求**始终是 `cache_read=0`——输入 26,275 token 全价。
+- **触发**：任何用 `opencode-go` 这类「要求带会话 id」的网关、并且配置里用 `{run}` 占位符的会话。
+- **原因**：`{run}` 由 `ai.base.expand_headers` 在**构造 Provider 时**展开，而摘要会**新建一个 Provider**（`make_summarizer`），于是带着另一个 `x-opencode-session` 发出。网关按这个 id 把请求分流到别的机器，那台机器没有我们前面的前缀——前缀再逐字节一致也没用。两条错误猜测都排除过：① 「摘要把被裁掉的旧消息也重放了」——让它只重放上一发那几条，仍然是 0；② provider 不缓存这种形状——主对话明明命中了。
+- **解决**：把 `{run}` 的展开时机从「每个 Provider」提到「每个会话」——`Session.connect` 里 `replace(settings, headers=expand_headers(settings.headers))`，主对话、摘要、合并共用同一个 id（`expand_headers` 幂等，重复展开不变）。
+- **验证**：同一个上下文、同一段前缀，改前 `摘要 in=26,275 cache_read=0`，改后 `摘要 in=26,272 cache_read=18,560`（命中 70.7%）。真机脚本新增断言「摘要命中前缀缓存」；离线 `test_run_placeholder_is_frozen_per_session` / `test_summarizer_gets_the_frozen_header`。
+- **关联**：`session.py` 的 `Session.connect`、`ai/base.py` 的 `expand_headers`、`ai/services.py` 的 `SERVICE_HEADERS`、`context_design.md` §5。
+
+### 流式响应没关干净：`aclose(): asynchronous generator is already running`
+
+- **状态**：已解决
+- **现象**：一轮对话正常跑完、结果也对，但进程退出时 stderr 冒出
+  `an error occurred during closing of asynchronous generator <AsyncClient.stream ...>` /
+  `RuntimeError: aclose(): asynchronous generator is already running`。只出现在脚本里自己
+  调 `asyncio.run` + `Session.aclose()` 的场景，官方的 `verify_context_live.py` 里没有。
+- **触发**：模型走 SSE 流式（所有 provider），一轮结束后立即关闭会话。
+- **原因**：`AsyncIterator` 的 `async for` 在 `break` / `GeneratorExit` 时**不会**替我们关闭
+  迭代器。整条链是 `provider.stream → post_sse → _post_with_retry → _parse_sse_async →
+  httpx(stream / aiter_lines / …)`；provider 在收到 `[DONE]` 时 `break`，后面几层就地被抛弃，
+  要等事件循环关闭才被 GC 收尾。收尾时外层正在 `athrow`，内层又调 `aclose()`，于是报
+  “already running”。实测在轮次结束后 `gc.get_objects()` 里能看到 5 个 Gradus 侧的
+  `post_sse` / `_post_with_retry` / `_parse_sse_async` 仍活着。
+- **解决**：逐层显式关闭，谁打开谁关：
+  1. 四个 provider：`events = post_sse(...)` + `try: async for ... finally: await events.aclose()`；
+  2. `post_sse`：同样的 `try/finally` 关闭 `_post_with_retry`；
+  3. `_post_with_retry`：`finally` 关闭 `_parse_sse_async`；
+  4. `_parse_sse_async`：`finally` 关闭上游的 `response.aiter_lines()`。
+- **验证**：同一份复现脚本改前有噪声、改后干净；`gc.get_objects()` 里 Gradus 侧的异步生成器
+  归零（只剩 httpx/httpcore 自己的内部迭代器，它们由 `async with client.stream` 的退出释放连接）。
+  离线 `test_break_after_done_closes_post_sse`——用一个「既迭代又记录 aclose」的跟踪对象，
+  去掉 provider 的 `await events.aclose()` 即失败（生成器会被引用计数碰巧回收，所以不能用生成器做断言对象）。
+- **补第二刀（agent 层）**：`agent/loop.py` 用 `anext(stream)` 迭代 provider 流，三条提前返回路径
+  （provider 抛异常、`StreamError`、流结束却没有 `StreamDone`）原本把生成器留给 GC；现在整段包在
+  `try/finally` 里，`finally` 调 `aclose()`（用 `getattr` 兜住没有 `aclose` 的手写迭代器）。
+  回归测试 `ProviderStreamCloseTest`：用一个「既迭代又记录 aclose」的对象，去掉 `finally` 即失败。
+- **关联**：`ai/transport.py`（`post_sse` / `_post_with_retry` / `_parse_sse_async`）、
+  `agent/loop.py`（`stream` 的 `try/finally`）、
+  `ai/providers/*.py` 的 `stream()`、`ai/docs/design.md` 的 `transport.py` 章节。
