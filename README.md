@@ -1,52 +1,48 @@
 # Gradus
 
-[中文](README.zh.md)
+![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
+![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
+![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
 
-**A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a sandboxed copy of the workspace that merges back when the session ends.
+[English](README.md) · [中文](README.zh.md)
 
-## Highlights
+**A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a private copy of the workspace that merges back when the session ends.
 
-- **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini all reduce to one message model plus 12 streaming events. Gemini is implemented against the documented format but is still **in testing** (no live endpoint verified yet).
-- **A tool loop with real control** — one async loop, 9 hooks, 8 run-level events, parallel tool execution, `steer` / `follow_up`, cancellation, and retries.
-- **Sandboxed execution** — `restricted` (Windows, no admin: read as usual, writes only inside the copy), `appcontainer` (deprecated), `docker`, or `local`; each session works on a private workspace copy, and added, edited, and deleted files merge back on close.
-- **MCP and extensions** — project-scoped MCP servers with explicit trust and OAuth, plus Python tools, slash commands, and `SKILL.md` skills loaded from `.gradus/`.
-- **Codemode** — the model writes Python that calls `tools.*`; only `text()` / `return` enters the context.
-- **Sessions and context** — JSONL history, resume, token budgeting, and automatic compaction.
-
-## Architecture
-
-```
-gradus/coding    product layer   config, sessions, tools, permissions, sandbox, CLI
-      |
-gradus/agent     control layer   loop, hooks, parallel tools, Agent facade
-      |
-gradus/ai        protocol layer  providers, streaming events, transport
-```
-
-Dependencies only point down. `ai` imports neither `agent` nor `coding`; `agent` never imports `coding`.
-
-## Status
-
-| Layer | What it contains | Tests |
-| --- | --- | --- |
-| `ai` | 4 vendor adapters + fake, fully async | 130 |
-| `agent` | loop, hooks, parallel tools, message queues, `Agent` facade | 90 |
-| `coding` | config, sessions, tools, permissions, MCP, extensions, codemode, sandbox, CLI | 380 |
-
-600 tests collected: 589 pass offline; the 11 live sandbox contract checks skip unless `GRADUS_SANDBOX_LIVE=1`.
-
-Python 3.13 · runtime dependencies: `httpx`, `httpx2`, `jsonschema`, `mcp` · managed with `uv`.
-
-## Quick start
+![The Gradus web UI: a session streaming a reply and running a bash tool call](docs/web-ui.gif)
 
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
-cd Gradus
-uv sync
-uv run pytest -q
+cd Gradus && uv sync
+uv run gradus
 ```
 
+That last line needs a model — one three-line `.env`, see [Quick start](#quick-start).
+
+## Why Gradus
+
+Three claims that separate it from the usual agent harness.
+
+1. **The session owns the transcript, not the provider.** History is stored provider-neutral and translated per request, so one session can move between Anthropic, OpenAI, and Gemini-style endpoints mid-conversation. Vendor-private fields such as thinking-block `signature` do not survive the trip; everything else does.
+2. **The agent never edits your workspace directly.** Every session runs against a copy — a `git worktree` when the workspace is a repository, a filtered tree otherwise — and changes merge back only on close. A killed session costs you nothing.
+3. **It is a runtime, not an app.** Four packages, imports pointing one way. `ai` knows nothing above it, so you can take the protocol layer and leave the rest; `agent` hands you a loop and a facade with no CLI attached.
+
+## Highlights
+
+- **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini reduce to one message model plus 12 streaming events. Gemini follows the documented format and is still **in testing** (no live endpoint verified).
+- **A tool loop with real control** — one async loop, 9 hooks, 8 run-level events, parallel tool execution, `steer` / `follow_up`, cancellation, and retries.
+- **Sandboxed execution** — `restricted` on Windows with no admin rights, plus `appcontainer` (deprecated), `docker`, and `local`. See [The sandbox](#the-sandbox).
+- **More than one agent** — multi-agent teams, background tasks, scheduled jobs, and transcript recall ship as tools in the `coding` layer.
+- **MCP and extensions** — project-scoped MCP servers with explicit trust and OAuth, plus Python tools, slash commands, and `SKILL.md` skills loaded from `.gradus/`.
+- **Codemode** — the model writes Python that calls `tools.*`; only `text()` / `return` enters the context.
+- **Sessions and context** — JSONL history, resume, token budgeting, automatic compaction, mid-session model switching.
+
+## Quick start
+
 ### Run the CLI
+
+```bash
+uv sync
+```
 
 Create `<workspace>/.env` with one connection block:
 
@@ -64,22 +60,11 @@ uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docke
 
 A key alone cannot identify a provider, so the service, model, and key are configured together. CLI flags override `.env`, which overrides `~/.gradus/config.json`.
 
-| Flag | Purpose |
-| --- | --- |
-| `--workspace` | Root for tools and commands (default: current directory) |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
-| `--service` / `--provider` / `--model` / `--base-url` | Override the connection |
-| `--resume` / `--session-dir` | Resume a JSONL session, or choose where new ones go |
-| `--mcp` / `--config` | Explicit MCP and config file paths |
-| `--untrust [path]` | Revoke trust for a project's MCP config, then exit |
-| `--reset-sandbox` | Clear orphan copies, AppContainer grants, and the profile |
-| `--log` | Append tool and error events to a JSONL file |
-
 Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill:name` expand saved prompts, and `exit` / `Ctrl-D` leaves.
 
 ### Run the web UI
 
-Two processes: the Python host and the browser bundle. Start the host first:
+Two processes: the Python host and the browser bundle. Start the host first.
 
 ```bash
 uv sync --extra web
@@ -95,7 +80,7 @@ open: http://127.0.0.1:8765/?token=dev
 
 The token is not optional: `/ws` closes with 4401 without the right one. Drop `--token` and the host generates a random one and prints that URL instead.
 
-Then pick one of:
+Then pick one:
 
 ```bash
 cd web && npm install && npm run build   # host serves web/dist — open the printed address
@@ -106,27 +91,15 @@ With the dev server, open `http://localhost:5173/?token=dev`: the frontend reads
 
 Restart the host after editing anything under `gradus/`; the frontend reloads on save by itself.
 
-### Switching models (web)
+### Run the tests
 
-`~/.gradus/config.json` (or whatever `--config` points at) may carry a candidate list; the web model picker reads it directly:
-
-```json
-{
-  "models": [
-    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
-  ]
-}
+```bash
+uv run pytest -q
 ```
 
-Each entry accepts the same connection fields as the top level (`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`); `name` is what the UI shows, and an omitted `api_key` reuses the current one. The list is read from the file only — environment variables still describe just the current model.
+Everything runs offline by default. The 11 live sandbox contract checks skip unless `GRADUS_SANDBOX_LIVE=1`.
 
-You do not have to hand-edit the JSON: the gear icon in the web header opens a settings panel that adds, edits, and removes candidate models for you (it never echoes keys back). The last model you pick is written to the top-level `"active"` field and restored on the next start. The panel's "Appearance" section also switches between light / dark / follow-system (kept in browser localStorage, not the config file).
-
-Switching does not start a new session: history is the provider-neutral representation, translated per request by whichever provider is active, so one session can move between `openai_compat`, `anthropic`, and `openai_responses`. Vendor-private fields such as thinking-block `signature` are not converted and may be dropped or passed through unchanged.
-
-## Sandbox
+## The sandbox
 
 | Backend | When it is used | Boundary |
 | --- | --- | --- |
@@ -142,6 +115,24 @@ Three boundaries worth stating plainly:
 - **`restricted` does not block the network.** The write boundary is real; the network is not. Use `docker` when a command must be offline.
 - **Command approval stays on.** The copy protects the host from accidental damage; it does not make arbitrary commands safe.
 - **MCP server processes are not sandboxed.** They run on the host with your privileges. A stdio server's default `cwd` is pointed at the copy so its relative paths line up, but HTTP servers and absolute paths still reach the host.
+
+## Architecture
+
+```
+gradus/host      web layer       host process, wire protocol, clock
+gradus/coding    product layer   config, sessions, tools, permissions, sandbox, MCP, CLI
+gradus/agent     control layer   loop, hooks, parallel tools, Agent facade
+gradus/ai        protocol layer  providers, streaming events, transport
+```
+
+Dependencies only point down. `ai` imports neither `agent` nor `coding`; `agent` never imports `coding`; `coding` never imports `host`.
+
+### Design principles
+
+1. **Dependencies point down only.** Upper layers may call lower ones; lower layers never see upper ones.
+2. **Events are the interface.** The 12 `ai` events are forwarded unchanged by `agent`, which only adds run-level events.
+3. **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are async; the loop never blocks on I/O.
+4. **Tools belong to the upper layer.** `agent` defines the `AgentTool` protocol; file, search, and shell implementations live in `coding`.
 
 ## Python API
 
@@ -212,17 +203,57 @@ finally:
 
 `Agent.connect()` creates one `httpx.AsyncClient` and reuses it across runs; `aclose()` closes it. Pass the same `client` to several `connect()` calls to share a pool.
 
-## Layout
+## Reference
+
+### CLI flags
+
+| Flag | Purpose |
+| --- | --- |
+| `--workspace` | Root for tools and commands (default: current directory) |
+| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
+| `--service` / `--provider` / `--model` / `--base-url` | Override the connection |
+| `--resume` / `--session-dir` | Resume a JSONL session, or choose where new ones go |
+| `--mcp` / `--config` | Explicit MCP and config file paths |
+| `--untrust [path]` | Revoke trust for a project's MCP config, then exit |
+| `--reset-sandbox` | Clear orphan copies, AppContainer grants, and the profile |
+| `--log` | Append tool and error events to a JSONL file |
+
+### Candidate models
+
+`~/.gradus/config.json` (or whatever `--config` points at) may carry a candidate list; the web model picker reads it directly:
+
+```json
+{
+  "models": [
+    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
+    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
+    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
+  ]
+}
+```
+
+Each entry accepts the same connection fields as the top level (`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`); `name` is what the UI shows, and an omitted `api_key` reuses the current one. The list is read from the file only — environment variables still describe just the current model.
+
+You do not have to hand-edit the JSON: the gear icon in the web header opens a settings panel that adds, edits, and removes candidate models for you (it never echoes keys back). The last model you pick is written to the top-level `"active"` field and restored on the next start. The panel's "Appearance" section also switches between light / dark / follow-system (kept in browser localStorage, not the config file).
+
+Switching does not start a new session: history is the provider-neutral representation, translated per request by whichever provider is active, so one session can move between `openai_compat`, `anthropic`, and `openai_responses`. Vendor-private fields such as thinking-block `signature` are not converted and may be dropped or passed through unchanged.
+
+### Layout
 
 ```
 Gradus/
 ├── gradus/
 │   ├── ai/          # providers, internal protocol, streaming events, transport
 │   ├── agent/       # loop, hooks, tool runtime, stateful Agent
-│   └── coding/      # config, sessions, tools, permissions, sandbox, MCP, CLI
+│   ├── coding/      # config, sessions, tools, permissions, sandbox, MCP, CLI
+│   └── host/        # web host process, wire protocol, clock
+├── bench/           # benchmark harness
+├── web/             # browser bundle
 ├── pyproject.toml
 └── uv.lock
 ```
+
+Python 3.13 · runtime dependencies: `httpx`, `httpx2`, `jsonschema`, `mcp` · managed with `uv`.
 
 ## Documentation
 
@@ -232,12 +263,7 @@ Gradus/
 | `agent` | [README](gradus/agent/README.md) | [design](gradus/agent/docs/design.md) | [plan](gradus/agent/agent_plan.md) |
 | `coding` | [README](gradus/coding/README.md) | [design](gradus/coding/docs/design.md) | [plan](gradus/coding/coding_plan.md) |
 
-## Design principles
-
-1. **Dependencies point down only.** Upper layers may call lower ones; lower layers never see upper ones. `ai` imports neither `agent` nor `coding`; `agent` never imports `coding`.
-2. **Events are the interface.** The 12 `ai` events are forwarded unchanged by `agent`, which only adds run-level events.
-3. **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are async; the loop never blocks on I/O.
-4. **Tools belong to the upper layer.** `agent` defines the `AgentTool` protocol; file, search, and shell implementations live in `coding`.
+Background reading in `gradus/coding/docs/`: [sandbox](gradus/coding/docs/sandbox.md) · [context design](gradus/coding/docs/context_design.md) · [multi-agent](gradus/coding/docs/multi_agent.md) · [background tasks](gradus/coding/docs/background_tasks.md) · [cron tasks](gradus/coding/docs/cron_tasks.md) · [recall](gradus/coding/docs/recall.md).
 
 ## Acknowledgements
 
