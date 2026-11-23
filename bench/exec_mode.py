@@ -250,7 +250,9 @@ def _test_patch(task: Task) -> tuple[Path, str, list[str]] | None:
             files.append(file)
     if not patch or not files:
         return None
-    path = Path(r"H:\bench") / f"{task.id}.exec-test_patch.diff"
+    # 写在 dataset 旁边而不是写死 H:\bench：后者只在作者机器上存在，
+    # 也让这个函数无法在不含 H: 盘的环境（CI、容器）里测试。
+    path = DATASET_DIR / f"{task.id}.exec-test_patch.diff"
     write_text_lf(path, patch)
     # 只跑 FAIL_TO_PASS 的节点：整文件跑会把环境导致的无关失败也算进来
     quoted = " ".join(f"'{target}'" for target in targets)
