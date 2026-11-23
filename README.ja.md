@@ -12,7 +12,7 @@
 
 **階層化されたコーディングエージェントランタイム。** Gradus はモデルのストリームをツールを使うセッションに変え、各セッションにワークスペースのプライベートコピーを与え、セッション終了時にホストへマージして戻します。
 
-[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
+[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 <br>
 

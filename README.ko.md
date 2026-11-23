@@ -12,7 +12,7 @@
 
 **계층화된 코딩 에이전트 런타임.** Gradus는 모델의 스트림을 도구를 쓰는 세션으로 바꾸고, 세션마다 워크스페이스의 사설 복사본을 주며, 세션이 끝나면 호스트로 다시 병합합니다.
 
-[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
+[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 <br>
 

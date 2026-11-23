@@ -10,19 +10,19 @@
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
 
-**A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a private copy of the workspace that merges back when the session ends.
+**分层的 Coding Agent 运行时。** Gradus 把模型的流式输出变成能调用工具的会话，并给每个会话一份私有的 workspace 副本，会话结束时再合回宿主。
 
-[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
+[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 <br>
 
-<img src="docs/web-ui.gif" alt="The Gradus web UI: a session streaming a reply and running a bash tool call" width="820">
+<img src="docs/web-ui.gif" alt="Gradus Web UI：一个会话正在流式输出，并调用 bash 工具" width="820">
 
-<sub>One turn: streaming reply → <code>bash</code> tool call → its result.</sub>
+<sub>一个回合：流式回复 → <code>bash</code> 工具调用 → 结果。</sub>
 
 </div>
 
-Needs Python 3.13 plus a model: three lines in `.env`. Full steps in [Quick start](#-quick-start).
+需要 Python 3.13，以及一个模型（`.env` 里三行）。完整步骤见[快速开始](#-快速开始)。
 
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
@@ -30,41 +30,41 @@ cd Gradus && uv sync
 uv run gradus
 ```
 
-## 🎯 Why Gradus
+## 🎯 为什么是 Gradus
 
-Three claims that separate it from the usual agent harness.
+三条与常见 agent 外壳不同的主张。
 
-1. 🧠 **The session owns the transcript, not the provider.** History is stored provider-neutral and translated per request, so one session can move between Anthropic, OpenAI, and Gemini-style endpoints mid-conversation. Vendor-private fields such as thinking-block `signature` do not survive the trip; everything else does.
-2. 📦 **The agent never edits your workspace directly.** Every session runs against a copy — a `git worktree` when the workspace is a repository, a filtered tree otherwise — and changes merge back only on close. A killed session costs you nothing.
-3. 🧰 **It is a runtime, not an app.** Four packages, imports pointing one way. `ai` knows nothing above it, so you can take the protocol layer and leave the rest; `agent` hands you a loop and a facade with no CLI attached.
+1. 🧠 **历史属于会话，不属于厂商。** 历史以厂商中立的表示存储，每次请求再由当前 provider 翻译，所以一个会话可以在对话中途换到 Anthropic、OpenAI、Gemini 风格的端点。厂商私有字段（如 thinking block 的 `signature`）在转换中不会保留，其余都会。
+2. 📦 **agent 不直接改你的 workspace。** 每个会话跑在副本上 —— 是 git 仓库就用 `git worktree`，否则用过滤过的目录树 —— 关闭时才合回。进程被杀，你没有任何损失。
+3. 🧰 **它是运行时，不是应用。** 四个包，import 单向。`ai` 对其上层一无所知，所以你可以只取协议层；`agent` 给你循环与门面，不附带 CLI。
 
-## ✨ Highlights
+## ✨ 特性
 
-- 🔌 **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini reduce to one message model plus 12 streaming events. Gemini follows the documented format and is still **in testing** (no live endpoint verified).
-- 🔁 **A tool loop with real control** — one async loop, 9 hooks, 8 run-level events, parallel tool execution, `steer` / `follow_up`, cancellation, and retries.
-- 🛡️ **Sandboxed execution** — `restricted` on Windows with no admin rights, plus `appcontainer` (deprecated), `docker`, and `local`. See [The sandbox](#-the-sandbox).
-- 👥 **More than one agent** — multi-agent teams, background tasks, scheduled jobs, and transcript recall ship as tools in the `coding` layer.
-- 🧩 **MCP and extensions** — project-scoped MCP servers with explicit trust and OAuth, plus Python tools, slash commands, and `SKILL.md` skills loaded from `.gradus/`.
-- 🐍 **Codemode** — the model writes Python that calls `tools.*`; only `text()` / `return` enters the context.
-- 💾 **Sessions and context** — JSONL history, resume, token budgeting, automatic compaction, mid-session model switching.
+- 🔌 **四种模型协议，一套内部形状** —— Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini 统一成一套消息模型与 12 个流式事件。Gemini 按官方格式实现，仍是**测试中**（尚未用真实端点验证）。
+- 🔁 **真正可控的工具循环** —— 单层异步循环、9 个 hook、8 个运行级事件、并行工具、`steer` / `follow_up`、取消与重试。
+- 🛡️ **沙箱执行** —— Windows 免管理员即可用的 `restricted`，另有 `appcontainer`（已弃用）、`docker`、`local`。见[沙箱](#-沙箱)。
+- 👥 **不止一个 agent** —— 多 agent 团队、后台任务、定时任务、历史召回，都以工具形式内置在 `coding` 层。
+- 🧩 **MCP 与扩展** —— 项目级 MCP server（显式信任 + OAuth），以及从 `.gradus/` 加载的 Python 工具、斜杠命令与 `SKILL.md` 技能。
+- 🐍 **Codemode** —— 模型写 Python 调用 `tools.*`，只有 `text()` / `return` 的结果进入上下文。
+- 💾 **会话与上下文** —— JSONL 历史、断点恢复、token 预算、自动压缩、会话中途换模型。
 
-## 🚀 Quick start
+## 🚀 快速开始
 
-### 💻 Run the CLI
+### 💻 运行 CLI
 
 ```bash
 uv sync
 ```
 
-Install it as a tool instead, if you would rather not keep a checkout around:
+不想保留仓库副本的话，也可以直接装成工具：
 
 ```bash
 uv tool install git+https://github.com/xyzhhh123/Gradus
 ```
 
-The examples below then run as `gradus` rather than `uv run gradus`.
+下面的示例把 `uv run gradus` 换成 `gradus` 即可。
 
-Create `<workspace>/.env` with one connection block:
+在 `<workspace>/.env` 里写一段连接配置：
 
 ```ini
 GRADUS_SERVICE=kimi-compat
@@ -73,98 +73,98 @@ GRADUS_API_KEY=sk-...
 ```
 
 ```bash
-uv run gradus                      # workspace = current directory
-uv run gradus --workspace ../app   # or point it somewhere else
+uv run gradus                      # workspace 就是当前目录
+uv run gradus --workspace ../app   # 或者指到别处
 uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docker -> local
 ```
 
-A key alone cannot identify a provider, so the service, model, and key are configured together. CLI flags override `.env`, which overrides `~/.gradus/config.json`.
+光有 key 无法确定 provider，所以 service、model、key 必须一起配。优先级：CLI 参数 > `.env` > `~/.gradus/config.json`。
 
-Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill:name` expand saved prompts, and `exit` / `Ctrl-D` leaves.
+REPL 里：`/reload` 重建工具与扩展，`/command` 与 `/skill:name` 展开已存提示词，`exit` 或 `Ctrl-D` 退出。
 
 <div align="center">
 
-  <img src="docs/cli-demo.gif" alt="A Gradus CLI session: one question, two tool calls, then a four-item answer" width="900">
+  <img src="docs/cli-demo.gif" alt="Gradus 的一个 CLI 会话：一次提问、两次工具调用，然后给出答案" width="900">
 
-  <sub>Recorded in Windows Terminal: one turn, two tool calls, then the answer.</sub>
+  <sub>在 Windows Terminal 里实录：一个回合、两次工具调用，然后给出答案。</sub>
 
 </div>
 
-### 🌐 Run the web UI
+### 🌐 运行 Web UI
 
-Two processes: the Python host and the browser bundle. Start the host first.
+两个进程：Python host 与浏览器 bundle。先起 host。
 
 ```bash
 uv sync --extra web
 uv run gradus-serve --port 8765 --token dev
 ```
 
-It prints the address to open, token included:
+它会打印带 token 的地址：
 
 ```
 Gradus web · kimi-k2.7-code · H:\your\workspace
 open: http://127.0.0.1:8765/?token=dev
 ```
 
-The token is not optional: `/ws` closes with 4401 without the right one. Drop `--token` and the host generates a random one and prints that URL instead.
+token 不是可选项：`/ws` 在没有正确 token 时会以 4401 关闭。去掉 `--token`，host 会随机生成一个并打印对应 URL。
 
-Then pick one:
+然后二选一：
 
 ```bash
-cd web && npm install && npm run build   # host serves web/dist — open the printed address
-cd web && npm run dev                    # Vite on :5173, proxies /ws to 127.0.0.1:8765
+cd web && npm install && npm run build   # host 直接服务 web/dist —— 打开打印的地址
+cd web && npm run dev                    # Vite 在 :5173，把 /ws 代理到 127.0.0.1:8765
 ```
 
-With the dev server, open `http://localhost:5173/?token=dev`: the frontend reads `token` from the page URL, so it has to match `--token`. Adding `&mock=1` loads the UI against a scripted connection with no host at all.
+用 dev server 时打开 `http://localhost:5173/?token=dev`：前端从页面 URL 读 `token`，所以必须与 `--token` 一致。加 `&mock=1` 可以完全不连 host，用脚本化的假连接跑 UI。
 
-Restart the host after editing anything under `gradus/`; the frontend reloads on save by itself.
+改了 `gradus/` 下的东西要重启 host；前端保存即热更，不需要重启。
 
-### 🧪 Run the tests
+### 🧪 运行测试
 
 ```bash
 uv run pytest -q
 ```
 
-1002 tests pass offline in about 95 seconds. Another 15 are live checks that skip by default: sandbox contracts need `GRADUS_SANDBOX_LIVE=1`, container tests need `GRADUS_DOCKER_LIVE=1`.
+离线跑 1002 个用例通过，约 95 秒。另有 15 个实机用例默认跳过：沙箱契约需要 `GRADUS_SANDBOX_LIVE=1`，容器测试需要 `GRADUS_DOCKER_LIVE=1`。
 
-## 🔒 The sandbox
+## 🔒 沙箱
 
-| Backend | When it is used | Boundary |
+| 后端 | 使用时机 | 边界 |
 | --- | --- | --- |
-| 🪟 `restricted` | Windows; `auto` picks it first | Restricted token (synthetic SID + logon SID + `Everyone`): reads follow your account, writes only land in the copy and scratch. **No network isolation.** No admin, no extra install. |
-| 🪟 `appcontainer` | Windows; only when `restricted` is unavailable | AppContainer token, no network, Job Object kills child processes. **Deprecated**: kept working, no further work. |
-| 🐳 `docker` | Docker engine available | Container with `--network none`, memory / CPU / PID limits. **In testing**: kept as a cross-platform fallback, not yet verified against a live engine. |
-| 🏠 `local` | Fallback | None; commands run with your user privileges |
+| 🪟 `restricted` | Windows；`auto` 首选 | 受限令牌（合成 SID + logon SID + `Everyone`）：读跟随你的账户，写只落在副本与 scratch。**不隔离网络。** 免管理员，无需额外安装。 |
+| 🪟 `appcontainer` | Windows；仅当 `restricted` 不可用 | AppContainer 令牌，无网络，Job Object 杀子进程。**已弃用**：保持可用，不再投入。 |
+| 🐳 `docker` | 有 Docker engine | 容器，带 `--network none`、内存 / CPU / PID 限制。**测试中**：作为跨平台兜底保留，尚未用真实 engine 验证。 |
+| 🏠 `local` | 兜底 | 无；命令以你的用户权限运行 |
 
-A sandbox session never edits your workspace directly. It gets a private copy — `git worktree` when the workspace is a git repository, a filtered tree copy otherwise — and the file tools and commands both operate on that copy. On close, added and modified files are written back, deletions are applied, and a failed merge keeps the copy and prints its path. Copies left behind by a killed process are removed on the next start.
+沙箱会话从不直接改你的 workspace。它拿到一份私有副本 —— 是 git 仓库就用 `git worktree`，否则用过滤后的目录树 —— 文件工具与命令都作用在副本上。关闭时，新增与修改的文件写回，删除被执行；合并失败则保留副本并打印其路径。被强杀进程留下的副本，会在下次启动时清理。
 
-Three boundaries worth stating plainly:
+有三条边界值得直说：
 
-- ⚠️ **`restricted` does not block the network.** The write boundary is real; the network is not. Use `docker` when a command must be offline.
-- 🔒 **Command approval stays on.** The copy protects the host from accidental damage; it does not make arbitrary commands safe.
-- 🚫 **MCP server processes are not sandboxed.** They run on the host with your privileges. A stdio server's default `cwd` is pointed at the copy so its relative paths line up, but HTTP servers and absolute paths still reach the host.
+- ⚠️ **`restricted` 不拦网络。** 写边界是真的，网络边界不是。命令必须离线时用 `docker`。
+- 🔒 **命令审批仍然开着。** 副本保护宿主免于误伤，但不等于让任意命令变安全。
+- 🚫 **MCP server 进程不在沙箱内。** 它们以你的权限跑在宿主上。stdio server 的默认 `cwd` 会指到副本上，让相对路径对得上，但 HTTP server 与绝对路径仍然触达宿主。
 
-## 🧱 Architecture
+## 🧱 架构
 
 ```
-gradus/host      web layer       host process, wire protocol, clock
-gradus/coding    product layer   config, sessions, tools, permissions, sandbox, MCP, CLI
-gradus/agent     control layer   loop, hooks, parallel tools, Agent facade
-gradus/ai        protocol layer  providers, streaming events, transport
+gradus/host      Web 层        host 进程、wire 协议、时钟
+gradus/coding    产品层        配置、会话、工具、权限、沙箱、MCP、CLI
+gradus/agent     控制层        循环、hook、并行工具、Agent 门面
+gradus/ai        协议层        Provider、流式事件、传输
 ```
 
-Dependencies only point down. `ai` imports neither `agent` nor `coding`; `agent` never imports `coding`; `coding` never imports `host`.
+依赖只能向下。`ai` 不 import `agent` / `coding`；`agent` 不 import `coding`；`coding` 不 import `host`。
 
-### 📐 Design principles
+### 📐 设计原则
 
-1. ⬇️ **Dependencies point down only.** Upper layers may call lower ones; lower layers never see upper ones.
-2. 📡 **Events are the interface.** The 12 `ai` events are forwarded unchanged by `agent`, which only adds run-level events.
-3. ⚡ **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are async; the loop never blocks on I/O.
-4. 🔧 **Tools belong to the upper layer.** `agent` defines the `AgentTool` protocol; file, search, and shell implementations live in `coding`.
+1. ⬇️ **依赖只能向下。** 上层可以调下层，下层永远看不到上层。
+2. 📡 **事件即接口。** 12 个 `ai` 事件被 `agent` 原样转发，只追加运行级事件。
+3. ⚡ **全链路异步。** `Provider.stream()`、`run_loop()`、`AgentTool.execute()` 都是 async；循环从不阻塞在 I/O 上。
+4. 🔧 **工具属于上层。** `agent` 定义 `AgentTool` 协议；文件、搜索、shell 的实现活在 `coding`。
 
 ## 🐍 Python API
 
-Run a complete loop offline — no network, no API key:
+跑通一个完整循环，离线，无需网络与 API key：
 
 ```python
 import asyncio
@@ -202,7 +202,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Use a real model through the stateful `Agent` facade:
+接真实模型，用有状态的 `Agent` 门面：
 
 ```python
 from gradus.agent.agent import Agent
@@ -229,61 +229,61 @@ finally:
     await agent.aclose()
 ```
 
-`Agent.connect()` creates one `httpx.AsyncClient` and reuses it across runs; `aclose()` closes it. Pass the same `client` to several `connect()` calls to share a pool.
+`Agent.connect()` 创建一个 `httpx.AsyncClient` 并跨多次运行复用；`aclose()` 关闭它。把同一个 `client` 传给多个 `connect()` 可以共享连接池。
 
-## 📖 Reference
+## 📖 参考
 
-### 🚩 CLI flags
+### 🚩 CLI 参数
 
-| Flag | Purpose |
+| 参数 | 用途 |
 | --- | --- |
-| `--workspace` | Root for tools and commands (default: current directory) |
+| `--workspace` | 工具与命令的根目录（默认当前目录） |
 | `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
-| `--service` / `--provider` / `--model` / `--base-url` | Override the connection |
-| `--resume` / `--session-dir` | Resume a JSONL session, or choose where new ones go |
-| `--mcp` / `--config` | Explicit MCP and config file paths |
-| `--untrust [path]` | Revoke trust for a project's MCP config, then exit |
-| `--reset-sandbox` | Clear orphan copies, AppContainer grants, and the profile |
-| `--log` | Append tool and error events to a JSONL file |
+| `--service` / `--provider` / `--model` / `--base-url` | 覆盖连接配置 |
+| `--resume` / `--session-dir` | 恢复某个 JSONL 会话，或指定新会话存放位置 |
+| `--mcp` / `--config` | 显式指定 MCP 与配置文件路径 |
+| `--untrust [path]` | 撤销某项目 MCP 配置的信任，然后退出 |
+| `--reset-sandbox` | 清理孤儿副本、AppContainer 授权与 profile |
+| `--log` | 把工具与错误事件追加到 JSONL |
 
-### 🧩 Candidate models
+### 🧩 候选模型
 
-The web model picker, the settings panel, and theme switching are documented in **[docs/web-ui.md](docs/web-ui.md)**.
+Web 的模型选择器、设置面板与主题切换，见 **[docs/web-ui.md](docs/web-ui.md)**。
 
-### 📁 Layout
+### 📁 目录
 
 ```
 Gradus/
 ├── gradus/
-│   ├── ai/          # providers, internal protocol, streaming events, transport
-│   ├── agent/       # loop, hooks, tool runtime, stateful Agent
-│   ├── coding/      # config, sessions, tools, permissions, sandbox, MCP, CLI
-│   └── host/        # web host process, wire protocol, clock
-├── bench/           # benchmark harness
-├── web/             # browser bundle
+│   ├── ai/          # Provider、内部协议、流式事件、传输
+│   ├── agent/       # 循环、hook、工具运行时、有状态 Agent
+│   ├── coding/      # 配置、会话、工具、权限、沙箱、MCP、CLI
+│   └── host/        # Web host 进程、wire 协议、时钟
+├── bench/           # 基准测试框架
+├── web/             # 浏览器 bundle
 ├── pyproject.toml
 └── uv.lock
 ```
 
-Python 3.13 · runtime dependencies: `httpx`, `httpx2`, `jsonschema`, `mcp` · managed with `uv`.
+Python 3.13 · 运行依赖：`httpx`、`httpx2`、`jsonschema`、`mcp` · 环境用 `uv` 管理。
 
-## 📚 Documentation
+## 📚 文档
 
-| Layer | README | Design | Plan |
+| 层 | README | 设计 | 计划 |
 | --- | --- | --- | --- |
-| `ai` | [README](gradus/ai/README.md) | [design](gradus/ai/docs/design.md) | [plan](gradus/ai/ai_plan.md) |
-| `agent` | [README](gradus/agent/README.md) | [design](gradus/agent/docs/design.md) | [plan](gradus/agent/agent_plan.md) |
-| `coding` | [README](gradus/coding/README.md) | [design](gradus/coding/docs/design.md) | [plan](gradus/coding/coding_plan.md) |
+| `ai` | [README](gradus/ai/README.md) | [设计](gradus/ai/docs/design.md) | [计划](gradus/ai/ai_plan.md) |
+| `agent` | [README](gradus/agent/README.md) | [设计](gradus/agent/docs/design.md) | [计划](gradus/agent/agent_plan.md) |
+| `coding` | [README](gradus/coding/README.md) | [设计](gradus/coding/docs/design.md) | [计划](gradus/coding/coding_plan.md) |
 
-Background reading in `gradus/coding/docs/`: [sandbox](gradus/coding/docs/sandbox.md) · [context design](gradus/coding/docs/context_design.md) · [multi-agent](gradus/coding/docs/multi_agent.md) · [background tasks](gradus/coding/docs/background_tasks.md) · [cron tasks](gradus/coding/docs/cron_tasks.md) · [recall](gradus/coding/docs/recall.md).
+`gradus/coding/docs/` 下的延伸阅读：[沙箱](gradus/coding/docs/sandbox.md) · [上下文设计](gradus/coding/docs/context_design.md) · [多 agent](gradus/coding/docs/multi_agent.md) · [后台任务](gradus/coding/docs/background_tasks.md) · [定时任务](gradus/coding/docs/cron_tasks.md) · [历史召回](gradus/coding/docs/recall.md)。
 
-## 🙏 Acknowledgements
+## 🙏 致谢
 
-Gradus's layering, event model, and tool contract were informed by these open-source projects:
+Gradus 的分层、事件模型与工具契约参考了这些开源项目：
 
-- **Pi** (`@earendil-works/pi-agent-core`): reference for the agent loop, hook system, steering / follow-up, and tool protocol.
-- **OpenCode**: reference for API and tool design.
+- **Pi**（`@earendil-works/pi-agent-core`）：agent 循环、hook 体系、steering / follow-up、工具协议的参照。
+- **OpenCode**：API 与工具设计的参照。
 
-## 📄 License
+## 📄 许可证
 
 [MIT](LICENSE)

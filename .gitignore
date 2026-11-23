@@ -29,3 +29,6 @@ Thumbs.db
 # 评测产物（轨迹、补丁、容器日志）
 bench/runs/
 bench/build-context/
+
+# 录屏素材（只提交转好的 gif）
+*.mp4

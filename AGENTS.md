@@ -36,6 +36,6 @@ uv run python scripts/check_readmes.py        # keep the four READMEs in sync
 
 ## Notes
 
-- The four READMEs (`README.md`, `.zh.md`, `.ja.md`, `.ko.md`) must stay structurally identical. After editing one, run `scripts/check_readmes.py` — CI fails otherwise.
+- The four READMEs (`README.md` = 中文, `.en.md`, `.ja.md`, `.ko.md`) must stay structurally identical. After editing one, run `scripts/check_readmes.py` — CI fails otherwise. `README.md` is the Chinese one on purpose: it is what GitHub shows by default.
 - Session history lives in `<workspace>/.gradus/sessions/` (gitignored).
 - Docs per layer: `gradus/<layer>/README.md` and `gradus/<layer>/docs/design.md`.

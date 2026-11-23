@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep the four READMEs from drifting apart.
 
-Checks, across README.md / README.zh.md / README.ja.md / README.ko.md:
+Checks, across README.md / README.en.md / README.ja.md / README.ko.md:
 
 1. every file exists and carries the same language switcher line;
 2. the heading skeleton matches (same sequence of levels, so sections are
@@ -25,7 +25,7 @@ import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = ["README.md", "README.zh.md", "README.ja.md", "README.ko.md"]
+FILES = ["README.md", "README.en.md", "README.ja.md", "README.ko.md"]
 
 HEADING = re.compile(r"^(#{2,3})\s+(.*)$", re.MULTILINE)
 ANCHOR_LINK = re.compile(r"\]\(#([^)]+)\)")
@@ -66,7 +66,7 @@ def main() -> int:
         texts[name] = text
 
         for line in text.splitlines():
-            if all(other in line for other in ("README.md", "README.zh.md", "README.ja.md", "README.ko.md")):
+            if all(other in line for other in ("README.md", "README.en.md", "README.ja.md", "README.ko.md")):
                 switchers[name] = line.strip()
                 break
         else:
