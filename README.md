@@ -82,6 +82,14 @@ A key alone cannot identify a provider, so the service, model, and key are confi
 
 Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill:name` expand saved prompts, and `exit` / `Ctrl-D` leaves.
 
+<div align="center">
+
+  <img src="docs/cli-demo.png" alt="A Gradus CLI session: one question, two tool calls, then a four-item answer" width="720">
+
+  <sub>One CLI turn: two tool calls, then the answer — with a token breakdown at the end.</sub>
+
+</div>
+
 ### 🌐 Run the web UI
 
 Two processes: the Python host and the browser bundle. Start the host first.

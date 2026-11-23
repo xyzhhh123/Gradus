@@ -82,6 +82,14 @@ uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docke
 
 REPL 内では、`/reload` がツールと拡張を再構築し、`/command` と `/skill:name` が保存済みプロンプトを展開し、`exit` または `Ctrl-D` で抜けます。
 
+<div align="center">
+
+  <img src="docs/cli-demo.png" alt="Gradus の CLI セッション：質問、2 回のツール呼び出し、そして回答" width="720">
+
+  <sub>1 ターン：ツール呼び出し 2 回のあとに回答、末尾にトークン明細。</sub>
+
+</div>
+
 ### 🌐 Web UI を実行する
 
 プロセスは 2 つです。Python のホストとブラウザ用バンドルで、ホストを先に起動します。

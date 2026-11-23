@@ -82,6 +82,14 @@ uv run gradus --sandbox docker     # auto -> restricted -> appcontainer -> docke
 
 REPL 里：`/reload` 重建工具与扩展，`/command` 与 `/skill:name` 展开已存提示词，`exit` 或 `Ctrl-D` 退出。
 
+<div align="center">
+
+  <img src="docs/cli-demo.png" alt="Gradus 的一个 CLI 会话：一次提问、两次工具调用，然后给出答案" width="720">
+
+  <sub>一个 CLI 回合：两次工具调用后给出答案，末尾附 token 明细。</sub>
+
+</div>
+
 ### 🌐 运行 Web UI
 
 两个进程：Python host 与浏览器 bundle。先起 host。
