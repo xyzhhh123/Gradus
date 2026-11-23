@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
+from unittest import mock
 
 import httpx
 
@@ -21,6 +23,18 @@ URL = "https://example.test/v1/stream"
 
 def make_client(handler) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+class _StalledStream(httpx.AsyncByteStream):
+    """发出一个保活注释后永远不再产出——模拟上游停滞。
+
+    这正是 `read` 超时抓不到的情形：socket 上有字节流过（心跳），
+    但一个 SSE 事件都解析不出来。
+    """
+
+    async def __aiter__(self):
+        yield b": keep-alive\n\n"
+        await asyncio.sleep(3600)
 
 
 class TestParseSse(unittest.TestCase):
@@ -172,6 +186,71 @@ class TestPostSse(unittest.IsolatedAsyncioTestCase):
 
         # 不抛异常：最差是没解析出事件，或解析出一段乱码
         self.assertLessEqual(count, 1)
+
+    async def test_stall_before_any_event_is_retried(self):
+        """一个事件都没来就停滞：重发是安全的，应当重试。"""
+        calls = {"n": 0}
+        failures = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(200, stream=_StalledStream())
+
+        async with make_client(handler) as client:
+            async for item in post_sse(
+                URL,
+                headers=HEADERS,
+                payload={},
+                client=client,
+                max_retries=2,
+                backoff=0,
+                stall_timeout=0.05,
+            ):
+                if isinstance(item, TransportFailure):
+                    failures.append(item)
+
+        # 一次原始请求 + 两次重试，最后给出停滞失败
+        self.assertEqual(calls["n"], 3)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("stalled", failures[0].message)
+
+    async def test_events_are_delivered_without_extra_requests(self):
+        """正常流：事件逐条交付，且只发一次请求。"""
+        calls = {"n": 0}
+        seen = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(200, content=b"data: one\n\ndata: two\n\n")
+
+        async with make_client(handler) as client:
+            async for item in post_sse(
+                URL,
+                headers=HEADERS,
+                payload={},
+                client=client,
+                max_retries=2,
+                backoff=0,
+                stall_timeout=0.05,
+            ):
+                seen.append(item)
+
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual([item.data for item in seen], ["one", "two"])
+
+    def test_stall_timeout_env_override(self):
+        from gradus.ai import transport
+
+        with mock.patch.dict("os.environ", {transport.ENV_STALL_TIMEOUT: "15"}):
+            self.assertEqual(transport._stall_timeout_from_env(), 15.0)
+        with mock.patch.dict("os.environ", {transport.ENV_STALL_TIMEOUT: "nope"}):
+            self.assertEqual(
+                transport._stall_timeout_from_env(), transport.DEFAULT_STALL_TIMEOUT
+            )
+        with mock.patch.dict("os.environ", {transport.ENV_STALL_TIMEOUT: "-3"}):
+            self.assertEqual(
+                transport._stall_timeout_from_env(), transport.DEFAULT_STALL_TIMEOUT
+            )
 
 
 if __name__ == "__main__":

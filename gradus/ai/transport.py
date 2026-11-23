@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import AsyncIterable, AsyncIterator, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -58,6 +59,49 @@ class TransportFailure:
 RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
 DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
+
+#: 多久没解析出事件就认定这一流停滞了。
+#:
+#: `DEFAULT_TIMEOUT` 的 `read` 只量 socket 读取，而 SSE 的保活注释行（`: ping`）
+#: 每次都会把它重置——上游只要不停发心跳，停滞的补全就永远等不到超时。
+#: 这里量的是「解析出的事件」，心跳骗不过它。
+DEFAULT_STALL_TIMEOUT = 120.0
+ENV_STALL_TIMEOUT = "GRADUS_STALL_TIMEOUT"
+
+
+def _stall_timeout_from_env() -> float:
+    """读 `GRADUS_STALL_TIMEOUT`；非法值退回默认。"""
+    raw = os.environ.get(ENV_STALL_TIMEOUT)
+    if not raw:
+        return DEFAULT_STALL_TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_STALL_TIMEOUT
+    return value if value > 0 else DEFAULT_STALL_TIMEOUT
+
+
+class _Stall(Exception):
+    """`stall_timeout` 秒内没有解析出任何事件。"""
+
+
+async def _guard_stall(
+    source: AsyncIterator[SseEvent],
+    stall_timeout: float,
+) -> AsyncIterator[SseEvent]:
+    """逐条转发事件，两次事件间隔超过 `stall_timeout` 就中止这一流。
+
+    超时会取消正在等待的读取，把连接一起断掉，而不是把它留在后台挂着。
+    """
+    iterator = source.__aiter__()
+    while True:
+        try:
+            event = await asyncio.wait_for(anext(iterator), timeout=stall_timeout)
+        except StopAsyncIteration:
+            return
+        except (TimeoutError, asyncio.TimeoutError):
+            raise _Stall(f"no event for {stall_timeout:.0f}s") from None
+        yield event
 
 
 def _user_agent() -> str:
@@ -164,6 +208,7 @@ async def post_sse(
     timeout: httpx.Timeout = DEFAULT_TIMEOUT,
     max_retries: int = 2,
     backoff: float = 0.5,
+    stall_timeout: float | None = None,
 ) -> AsyncIterator[SseEvent | TransportFailure]:
     """发一次流式 POST，逐条吐出 SSE 事件。
 
@@ -188,6 +233,7 @@ async def post_sse(
         timeout=timeout,
         max_retries=max_retries,
         backoff=backoff,
+        stall_timeout=_stall_timeout_from_env() if stall_timeout is None else stall_timeout,
     )
     try:
         async for item in events:
@@ -208,6 +254,7 @@ async def _post_with_retry(
     timeout: httpx.Timeout,
     max_retries: int,
     backoff: float,
+    stall_timeout: float,
 ) -> AsyncIterator[SseEvent | TransportFailure]:
     attempt = 0
 
@@ -228,19 +275,29 @@ async def _post_with_retry(
                         return
                 else:
                     parsed = _parse_sse_async(response.aiter_lines())
+                    delivered = 0
                     try:
-                        async for item in parsed:
+                        async for item in _guard_stall(parsed, stall_timeout):
+                            delivered += 1
                             yield item
+                    except _Stall as exc:
+                        if delivered == 0 and attempt < max_retries:
+                            # 什么都没交付，重发是安全的
+                            delay = backoff * (2**attempt)
+                        else:
+                            yield TransportFailure(f"stream stalled: {exc}", response.status_code)
+                            return
                     except httpx.HTTPError as exc:
                         # 已经交付过内容，不重试，避免重复
                         yield TransportFailure(
                             f"stream interrupted: {type(exc).__name__}: {exc}",
                             response.status_code,
                         )
+                    else:
+                        return
                     finally:
                         # 上游可能只取到 `[DONE]` 就结束；不关它，httpx 的响应体会一直挂着。
                         await parsed.aclose()
-                    return
 
         except httpx.TimeoutException as exc:
             if attempt >= max_retries:
