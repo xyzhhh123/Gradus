@@ -156,6 +156,9 @@ BASE_PROMPT = (
     "- codemode runs a Python script that can call tools.* - use it when a task needs several "
     "tool calls in a row; it costs less context than calling them one by one.\n"
     "- recall_history fetches history that was compacted away: pass entry ids or a keyword query.\n"
+    "- When sub-agent tools are listed, decide up front whether this task is worth splitting: "
+    "if yes, call plan_tasks first and then hand off (do not do the delegated work yourself); "
+    "if no, say so once and work single-agent.\n"
     "- Task graph, sub-agent and schedule tools are NOT declared by default: call tool_search "
     "with what you need (e.g. \"spawn agent\", \"list tasks\"). A search that matches nothing "
     "returns the full index, and tool_search(load=[\"name\"]) loads one by exact name.\n"
@@ -373,7 +376,9 @@ def _build_tools(
     if tasks is not None:
         catalog.add_all(create_task_tools(tasks), "deferred")
     if tasks is not None and team is not None:
-        catalog.add_all(create_multiagent_tools(team), "deferred")
+        # 直接声明，不进 deferred：deferred 的工具模型看不见，必须主动 tool_search 才会出现，
+        # 实测 4 道题 0 次 tool_search、0 次 spawn——能力等于不存在。
+        catalog.add_all(create_multiagent_tools(team))
     if recall is not None:
         catalog.add(recall)
     if skills:
