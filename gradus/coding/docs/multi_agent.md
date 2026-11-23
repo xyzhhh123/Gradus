@@ -216,7 +216,7 @@ await asyncio.wait(pending, timeout=timeout)
 | `coding/tasks.py` | `Task`、`TaskGraph`（增删、连边、环检测、认领、完成解锁、放回、原子读写、加载时释放中断节点） |
 | `coding/multiagent.py` | `Subagent`、`AgentTeam`（spawn / wait / close / interrupt / aclose / send）、`_task_prompt` |
 | `coding/bus.py` | `Message`、`Bus`（寻址校验 + ring buffer） |
-| `coding/tools/tasks.py` | 任务图工具（`plan_tasks` + create/update/list/get/claim/complete） |
+| `coding/tools/tasks.py` | 任务图工具（create/update/list/get/claim/complete，与 learn-claude-code s10 一致） |
 | `coding/tools/multiagent.py` | `spawn_agent`（含 `files` 所有权）/ `wait` / `list_agents` / `send_message`（含 `kind`）/ `close_agent` / `interrupt_agent` |
 | `coding/session.py` | `spawn`（子会话）、`attach_team` / `team`（间接引用）、`_settings_for` |
 | `host/serve.py` | 创建团队并回填引用；`stop_team` 全量关闭 |
@@ -227,18 +227,22 @@ await asyncio.wait(pending, timeout=timeout)
 
 上面描述的是**能力**；这一节记录为了让这套能力「按正确顺序使用」加的三条约束，以及 bench 实测。
 
-### 1. 先规划后执行：`plan_tasks` + `require_plan`
+### 1. 派活前必须有 briefing：`require_plan`
 
-以前模型可以建一个空节点就 `spawn_agent`——图在，但规划没有发生。现在：
+执行者看不到主对话，所以一个只有 subject、没有 description 的节点派出去等于空手。现在：
 
-- `coding/tools/tasks.py` 新增 `plan_tasks(nodes)`：一次提交整张 DAG
-  （`key / subject / description / blocked_by`），服务端**先全量校验**（key 唯一、
-  描述非空、依赖只指向本次 key、环检测），通过后建节点、连边，并置 `TaskGraph.planned`；
-- `AgentTeam(require_plan=True)` 下，`spawn_agent` 拒绝两种情况：
-  1. 图还没规划 → `no plan yet: call plan_tasks ...`；
-  2. 节点 `description` 为空 → 要求先写 briefing（执行者看不到主对话）。
+- `create_task(subject, description, blocked_by=...)` 一次把节点和依赖建好
+  （`blocked_by` 可省略，事后再用 `update_task` 连边）；
+- `AgentTeam(require_plan=True)` 下，`spawn_agent` 拒绝 `description` 为空的节点：
+  `task X has no description: plan the task first ...`；
+- 依赖没完成的任务同样派不出去——这是 `TaskGraph.claim` 强制的，不靠提示词。
 
-宿主/bench 打开 `require_plan` 后，"任务规划好才执行"从提示词变成**前置条件**。
+宿主/bench 打开 `require_plan` 后，"先把节点写清楚再派活"从提示词变成**前置条件**。
+
+> 2026-11-23 变更：原先还有一个 `plan_tasks(nodes)` 一次提交整张 DAG 的工具，配合
+> `TaskGraph.planned` 标记做「没规划就拒绝派活」的门槛。移除原因：派活时 task 必然
+> 已存在，那个门槛天然成立，等于死代码；而 7 个任务图工具对模型的负担大于收益。
+> 现在回到 learn-claude-code s10 的 6 个工具。
 
 ### 2. 分工的所有权：`spawn_agent(files=[...])` + 写保护
 
@@ -264,8 +268,8 @@ await asyncio.wait(pending, timeout=timeout)
 - `bench/run.py` 不再有开关：`exec_mode` 每次都建 `AgentTeam(..., require_plan=True)` 并回填；
 - `TaskResult` 新增 `multiagent / subagents / sub_input / sub_output`，轨迹新增
   `multiagent` 与 `subagent_turn`，报告多一行子 agent 统计；
-- 启用时任务消息追加 `DELEGATION_HINT`（先 `plan_tasks`、派活带 `files`、`wait` 后集成）；
-  `GRADUS_MA_FORCE=1` 仅用于冒烟。
+- 启用时任务消息追加 `DELEGATION_HINT`（先 `create_task` 写清 briefing 与 `blocked_by`、
+  派活带 `files`、`wait` 后集成）；`GRADUS_MA_FORCE=1` 仅用于冒烟。
 
 **冒烟数据**（`pytest-dev__pytest-10081`，强制派活）：
 

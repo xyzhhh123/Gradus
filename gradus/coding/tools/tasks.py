@@ -20,8 +20,8 @@ CREATE_TASK_SPEC = ToolSpec(
     description=(
         "Create a node in the task graph. Tasks are the unit of work: they can "
         "depend on each other, and a task only becomes startable once every task "
-        "it is blocked by is completed. Create all nodes first, then connect them "
-        "with update_task using the returned ids."
+        "it is blocked by is completed. Pass `blocked_by` to wire dependencies in "
+        "the same call, or add them later with update_task."
     ),
     parameters={
         "type": "object",
