@@ -56,6 +56,14 @@ uv run gradus
 uv sync
 ```
 
+リポジトリを残したくない場合は、ツールとしてインストールできます：
+
+```bash
+uv tool install git+https://github.com/xyzhhh123/Gradus
+```
+
+以降の例は `uv run gradus` を `gradus` に読み替えてください。
+
 `<workspace>/.env` に接続設定をひとまとまり書きます：
 
 ```ini

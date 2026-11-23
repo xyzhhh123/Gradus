@@ -56,6 +56,14 @@ uv run gradus
 uv sync
 ```
 
+不想保留仓库副本的话，也可以直接装成工具：
+
+```bash
+uv tool install git+https://github.com/xyzhhh123/Gradus
+```
+
+下面的示例把 `uv run gradus` 换成 `gradus` 即可。
+
 在 `<workspace>/.env` 里写一段连接配置：
 
 ```ini

@@ -56,6 +56,14 @@ Three claims that separate it from the usual agent harness.
 uv sync
 ```
 
+Install it as a tool instead, if you would rather not keep a checkout around:
+
+```bash
+uv tool install git+https://github.com/xyzhhh123/Gradus
+```
+
+The examples below then run as `gradus` rather than `uv run gradus`.
+
 Create `<workspace>/.env` with one connection block:
 
 ```ini
