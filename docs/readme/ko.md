@@ -284,6 +284,11 @@ Gradus의 계층 구조, 이벤트 모델, 도구 계약은 다음 오픈소스 
 - **Pi** (`@earendil-works/pi-agent-core`): 에이전트 루프, 훅 시스템, steering / follow-up, 도구 프로토콜의 참조.
 - **OpenCode**: API와 도구 설계의 참조.
 
-## 📄 라이선스
+컨텍스트 예산, 압축 시점, recall 전략은 아래 프로젝트들과 비교했습니다. 항목별 비교는 [`context_reference.md`](../../gradus/coding/docs/context_reference.md)에 있습니다:
 
-[MIT](../../LICENSE)
+- **Codex**: 원시 윈도우 대비 비율로 예산을 잡고, 요약으로 압축.
+- **Hermes** (hermes-agent): 가장 보수적인 방식 — 출력 예약분을 먼저 빼고 비율을 적용하며, 64K 하한과 85% 상한을 둡니다.
+- **DeepSeek Harness (DSH)**: 원시 윈도우의 80%, 요약 기반 압축.
+- **Reasonix** (deepseek-reasonix): 원시 윈도우의 90%.
+
+Gradus는 [MIT 라이선스](../../LICENSE)로 배포됩니다.

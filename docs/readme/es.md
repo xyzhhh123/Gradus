@@ -284,6 +284,11 @@ El diseño por capas, el modelo de eventos y el contrato de herramientas de Grad
 - **Pi** (`@earendil-works/pi-agent-core`): referencia para el bucle del agente, el sistema de hooks, steering / follow-up y el protocolo de herramientas.
 - **OpenCode**: referencia para el diseño de la API y de las herramientas.
 
-## 📄 Licencia
+El presupuesto de contexto, el momento de compactar y la estrategia de recuperación se compararon con estos proyectos; la comparación punto por punto está en [`context_reference.md`](../../gradus/coding/docs/context_reference.md):
 
-[MIT](../../LICENSE)
+- **Codex**: presupuesto como porcentaje de la ventana bruta, compactación por resumen.
+- **Hermes** (hermes-agent): la opción más conservadora — descuenta primero la reserva de salida, luego aplica un porcentaje, con un suelo de 64K y un techo del 85%.
+- **DeepSeek Harness (DSH)**: 80% de la ventana bruta, compactación por resumen.
+- **Reasonix** (deepseek-reasonix): 90% de la ventana bruta.
+
+Gradus se publica bajo la [licencia MIT](../../LICENSE).

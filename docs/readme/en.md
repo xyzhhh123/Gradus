@@ -284,6 +284,11 @@ Gradus's layering, event model, and tool contract were informed by these open-so
 - **Pi** (`@earendil-works/pi-agent-core`): reference for the agent loop, hook system, steering / follow-up, and tool protocol.
 - **OpenCode**: reference for API and tool design.
 
-## 📄 License
+Context budgeting, compaction timing, and recall were compared against these projects; the point-by-point comparison is in [`context_reference.md`](../../gradus/coding/docs/context_reference.md):
 
-[MIT](../../LICENSE)
+- **Codex**: budget as a percentage of the raw window, summary-based compaction.
+- **Hermes** (hermes-agent): the most conservative of the set — subtract the output reservation first, then apply a ratio, with a 64K floor and an 85% ceiling.
+- **DeepSeek Harness (DSH)**: 80% of the raw window, summary-based compaction.
+- **Reasonix** (deepseek-reasonix): 90% of the raw window.
+
+Gradus is released under the [MIT License](../../LICENSE).

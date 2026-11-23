@@ -284,6 +284,11 @@ Schichtung, Ereignismodell und Werkzeugvertrag von Gradus sind von diesen Open-S
 - **Pi** (`@earendil-works/pi-agent-core`): Referenz für die Agent-Schleife, das Hook-System, Steering / Follow-up und das Werkzeugprotokoll.
 - **OpenCode**: Referenz für API- und Werkzeugdesign.
 
-## 📄 Lizenz
+Kontextbudget, Zeitpunkt der Kompaktierung und Recall-Strategie wurden mit diesen Projekten verglichen; der Vergleich Punkt für Punkt steht in [`context_reference.md`](../../gradus/coding/docs/context_reference.md):
 
-[MIT](../../LICENSE)
+- **Codex**: Budget als Prozentsatz des rohen Fensters, Zusammenfassungs-Kompaktierung.
+- **Hermes** (hermes-agent): die konservativste Variante — erst die Ausgabereserve abziehen, dann einen Anteil anwenden, mit 64K-Untergrenze und 85%-Obergrenze.
+- **DeepSeek Harness (DSH)**: 80 % des rohen Fensters, Zusammenfassungs-Kompaktierung.
+- **Reasonix** (deepseek-reasonix): 90 % des rohen Fensters.
+
+Gradus steht unter der [MIT-Lizenz](../../LICENSE).

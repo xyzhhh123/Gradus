@@ -284,6 +284,11 @@ Le découpage en couches, le modèle d'événements et le contrat d'outils de Gr
 - **Pi** (`@earendil-works/pi-agent-core`) : référence pour la boucle de l'agent, le système de hooks, le steering / follow-up et le protocole d'outils.
 - **OpenCode** : référence pour la conception de l'API et des outils.
 
-## 📄 Licence
+Le budget de contexte, le moment du compactage et la stratégie de rappel ont été comparés à ces projets ; la comparaison point par point est dans [`context_reference.md`](../../gradus/coding/docs/context_reference.md) :
 
-[MIT](../../LICENSE)
+- **Codex** : budget en pourcentage de la fenêtre brute, compactage par résumé.
+- **Hermes** (hermes-agent) : l'option la plus prudente — on déduit d'abord la réserve de sortie, puis on applique un ratio, avec un plancher de 64K et un plafond de 85 %.
+- **DeepSeek Harness (DSH)** : 80 % de la fenêtre brute, compactage par résumé.
+- **Reasonix** (deepseek-reasonix) : 90 % de la fenêtre brute.
+
+Gradus est publié sous [licence MIT](../../LICENSE).

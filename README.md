@@ -284,6 +284,11 @@ Gradus 的分层、事件模型与工具契约参考了这些开源项目：
 - **Pi**（`@earendil-works/pi-agent-core`）：agent 循环、hook 体系、steering / follow-up、工具协议的参照。
 - **OpenCode**：API 与工具设计的参照。
 
-## 📄 许可证
+上下文预算、压缩时机与召回策略对照了下面几家，逐项比较见 [`gradus/coding/docs/context_reference.md`](gradus/coding/docs/context_reference.md)：
 
-[MIT](LICENSE)
+- **Codex**：以裸窗口百分比划定预算，摘要式压缩。
+- **Hermes**（hermes-agent）：最保守的一档 —— 先扣掉输出预留，再按比例，另有 64K 下限与 85% 上限。
+- **DeepSeek Harness（DSH）**：裸窗口 80% 的预算口径，摘要式压缩。
+- **Reasonix**（deepseek-reasonix）：裸窗口 90% 的预算口径。
+
+Gradus 以 [MIT 许可](LICENSE)发布。

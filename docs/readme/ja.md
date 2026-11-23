@@ -284,6 +284,11 @@ Gradus の階層構造、イベントモデル、ツール契約は、以下の�
 - **Pi**（`@earendil-works/pi-agent-core`）：エージェントループ、フック機構、steering / follow-up、ツールプロトコルの参照元。
 - **OpenCode**：API とツール設計の参照元。
 
-## 📄 ライセンス
+コンテキスト予算、圧縮のタイミング、recall の戦略は以下のプロジェクトと比較しました。項目ごとの比較は [`context_reference.md`](../../gradus/coding/docs/context_reference.md) にあります：
 
-[MIT](../../LICENSE)
+- **Codex**：生のウィンドウに対する割合で予算を決め、要約で圧縮。
+- **Hermes**（hermes-agent）：もっとも保守的 —— 出力の予約分を先に引き、そのうえで割合を適用。64K の下限と 85% の上限を持つ。
+- **DeepSeek Harness（DSH）**：生のウィンドウの 80%、要約で圧縮。
+- **Reasonix**（deepseek-reasonix）：生のウィンドウの 90%。
+
+Gradus は [MIT ライセンス](../../LICENSE) で公開されています。
