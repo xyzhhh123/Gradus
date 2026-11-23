@@ -111,6 +111,9 @@ class GradusAgent(BaseAgent):
             env.update(_host_connection())
         if self.model_name and not env.get("GRADUS_MODEL"):
             env["GRADUS_MODEL"] = self.model_name
+        # Gradus stops after 20 turns by default. Benchmark tasks need far more: one
+        # task can spend dozens of turns just exploring before it edits anything.
+        env.setdefault("GRADUS_MAX_TURNS", str(self._extra_env.get("max_turns", 100)))
 
         prompt = _flatten(instruction)
         # `--yes` is required: there is no one to answer the approval prompt in a
