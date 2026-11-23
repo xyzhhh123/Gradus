@@ -84,9 +84,9 @@ REPL 内では、`/reload` がツールと拡張を再構築し、`/command` と
 
 <div align="center">
 
-  <img src="docs/cli-demo.png" alt="Gradus の CLI セッション：質問、2 回のツール呼び出し、そして回答" width="720">
+  <img src="docs/cli-demo.gif" alt="Gradus の CLI セッション：質問、2 回のツール呼び出し、そして回答" width="900">
 
-  <sub>1 ターン：ツール呼び出し 2 回のあとに回答、末尾にトークン明細。</sub>
+  <sub>Windows Terminal での実録：1 ターン、ツール呼び出し 2 回、そして回答。</sub>
 
 </div>
 

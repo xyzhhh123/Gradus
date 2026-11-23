@@ -84,9 +84,9 @@ REPL 里：`/reload` 重建工具与扩展，`/command` 与 `/skill:name` 展开
 
 <div align="center">
 
-  <img src="docs/cli-demo.png" alt="Gradus 的一个 CLI 会话：一次提问、两次工具调用，然后给出答案" width="720">
+  <img src="docs/cli-demo.gif" alt="Gradus 的一个 CLI 会话：一次提问、两次工具调用，然后给出答案" width="900">
 
-  <sub>一个 CLI 回合：两次工具调用后给出答案，末尾附 token 明细。</sub>
+  <sub>在 Windows Terminal 里实录：一个回合、两次工具调用，然后给出答案。</sub>
 
 </div>
 

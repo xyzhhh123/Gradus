@@ -84,9 +84,9 @@ REPL 안에서 `/reload`는 도구와 확장을 다시 만들고, `/command`와 
 
 <div align="center">
 
-  <img src="docs/cli-demo.png" alt="Gradus CLI 세션: 질문, 두 번의 도구 호출, 그다음 답변" width="720">
+  <img src="docs/cli-demo.gif" alt="Gradus CLI 세션: 질문, 두 번의 도구 호출, 그다음 답변" width="900">
 
-  <sub>한 턴: 도구 호출 두 번 뒤에 답변, 끝에 토큰 내역.</sub>
+  <sub>Windows Terminal에서 실제 녹화: 한 턴, 도구 호출 두 번, 그다음 답변.</sub>
 
 </div>
 

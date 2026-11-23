@@ -84,9 +84,9 @@ Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill
 
 <div align="center">
 
-  <img src="docs/cli-demo.png" alt="A Gradus CLI session: one question, two tool calls, then a four-item answer" width="720">
+  <img src="docs/cli-demo.gif" alt="A Gradus CLI session: one question, two tool calls, then a four-item answer" width="900">
 
-  <sub>One CLI turn: two tool calls, then the answer — with a token breakdown at the end.</sub>
+  <sub>Recorded in Windows Terminal: one turn, two tool calls, then the answer.</sub>
 
 </div>
 
