@@ -40,6 +40,9 @@ CODEMODE_SPEC = ToolSpec(
     description=(
         "Run a Python script that can call the other tools through `tools.<name>(**kwargs)`. "
         "Use `text(value)` for output and `return` for a final value; printed output is discarded. "
+        "`import` is not available and underscore attributes are blocked: the script only gets the "
+        "`tools` namespace plus side-effect-free builtins, so there is no `open` and no `print` — "
+        "read data with `tools.read_file(...)` and filter it with plain loops and comprehensions. "
         "Writes and commands ask once for the whole script."
     ),
     parameters={
