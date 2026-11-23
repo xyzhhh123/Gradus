@@ -48,5 +48,5 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check the four READMEs stay in sync
+      - name: Check the seven READMEs stay in sync
         run: uv run --no-project python scripts/check_readmes.py
