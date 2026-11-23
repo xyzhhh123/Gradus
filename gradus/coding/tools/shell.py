@@ -105,11 +105,14 @@ class ShellTool:
         background: BackgroundTasks | None = None,
         output_chars: int | None = None,
     ) -> None:
-        self._root = root
+        # 归一化：Windows 的 8.3 短名（`RUNNER~1`）与长名是同一个目录，
+        # 但字符串不同。Environment 实现内部一律用 resolve 后的路径比较，
+        # 这里不归一就会让子进程的 cwd 与调用方看到的形式对不上。
+        self._root = Path(root).expanduser().resolve()
         self._executable = executable
         self._prefix = tuple(prefix)
         self.spec = spec
-        self._env = env or LocalEnvironment(root)
+        self._env = env or LocalEnvironment(self._root)
         self._background = background
         self._output_chars = output_chars or MAX_OUTPUT
 

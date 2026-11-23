@@ -166,7 +166,9 @@ class DockerEnvironment:
         self._network = network
         self._docker = docker
         self._name = f"gradus-{uuid4().hex[:12]}"
-        self._scratch = Path(tempfile.mkdtemp(prefix="gradus-sandbox-"))
+        # mkdtemp 在启用 8.3 短名的系统上返回短路径，而 map_path 比较的是
+        # resolve 之后的路径，两边不归一就会误判「不在挂载内」。
+        self._scratch = Path(tempfile.mkdtemp(prefix="gradus-sandbox-")).resolve()
         self._started = False
 
     def scratch_dir(self) -> Path:

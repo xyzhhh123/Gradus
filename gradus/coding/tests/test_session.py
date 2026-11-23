@@ -911,7 +911,9 @@ class McpTrustTest(unittest.IsolatedAsyncioTestCase):
 class ContextFilesTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name)
+        # read_project_context 返回归一化后的路径；期望值也要归一化，否则在
+        # 启用 8.3 短名的系统上（CI runner）拿到的是短路径，比较必然失败。
+        self.root = Path(self._tmp.name).resolve()
         self.nested = self.root / "pkg"
         self.nested.mkdir()
 
@@ -950,7 +952,7 @@ class ContextFilesTest(unittest.TestCase):
 class ContextSystemTest(unittest.IsolatedAsyncioTestCase):
     async def test_connect_injects_project_instructions(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "ws"
+            root = (Path(tmp) / "ws").resolve()
             root.mkdir()
             (root / "AGENTS.md").write_text("Always use tabs.", encoding="utf-8")
 
