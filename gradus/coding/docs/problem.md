@@ -288,3 +288,36 @@
 - **关联**：`ai/transport.py`（`post_sse` / `_post_with_retry` / `_parse_sse_async`）、
   `agent/loop.py`（`stream` 的 `try/finally`）、
   `ai/providers/*.py` 的 `stream()`、`ai/docs/design.md` 的 `transport.py` 章节。
+
+### 多 agent 工具进了 deferred，能力等于不存在
+
+- **状态**：已解决
+- **现象**：会话明明配好了 `tasks` 与 `team`，模型整场一次 `tool_search` 都不调、一次 `spawn` 都不发，多 agent 能力全程未被使用。
+- **触发**：`tasks` 与 `team` 都非空，`create_multiagent_tools(team)` 以 `deferred` 注册。
+- **原因**：`deferred` 的工具 schema 不出现在请求里，模型只能靠主动 `tool_search` 发现；而 BASE_PROMPT 当时也没给出任何「你有派活能力」的线索。看不到，就想不起来要用。
+- **解决**：
+  1. `create_multiagent_tools(team)` 改为直接声明，不进 `deferred`；
+  2. BASE_PROMPT 补一条：列到 sub-agent 工具时，先判断这次任务值不值得拆——值得就先 `plan_tasks` 再派活（不要自己把派出去的工作干了），不值得就说明一次并单干。
+- **验证**：改前 bench 4 道题实测 0 次 `tool_search`、0 次 `spawn`。改后尚未重跑 bench 回归，需用 `python bench/run.py` 复测确认。
+- **关联**：`session.py`（`_build_tools`、`BASE_PROMPT`）、`docs/multi_agent.md`。
+
+### codemode 描述没写 import / open / print 不可用
+
+- **状态**：已解决
+- **现象**：模型在 codemode 里写 `import json`，运行即 `ValueError: import is not allowed`，一次工具调用白费。
+- **触发**：任何想用脚本批量处理的任务。
+- **原因**：`codemode_harness.py` 在子进程里用受限 builtins，AST 层面拒绝 `import` 与下划线属性，白名单里也没有 `open` / `print`；但 `CODEMODE_SPEC.description` 只说了 `tools.*`、`text()`、`return`，限制一个字没提。
+- **解决**：描述补齐——`import` 不可用、下划线属性被拦、只拿得到 `tools` 命名空间与无副作用的 builtins（没有 `open`、没有 `print`），读数据要用 `tools.read_file(...)`。
+- **验证**：`tests/test_codemode.py` 12 项通过；本改动只改描述文本，无行为变化。
+- **关联**：`tools/codemode.py`（`CODEMODE_SPEC`）、`tools/codemode_harness.py`（`ALLOWED_BUILTINS`）。
+
+### `<project_context>` 不被当作权威，模型重复勘察
+
+- **状态**：已解决
+- **现象**：一个 `project_context` 已能完整回答的架构问题（"`gradus/` 下有哪些包？依赖方向是什么？"）烧掉 16 个回合、96,075 输入 token、27 次工具调用，中途反复 grep 到 `(no matches)`。
+- **触发**：工作区存在 `AGENTS.md`，且问题本身只涉及布局与依赖方向。
+- **原因**：`BASE_PROMPT` 只写了「先用 grep/glob 定位再读文件」，全文没提 `<project_context>` 是权威来源。模型把项目地图当背景资料而非答案，仍然从零勘察。
+- **解决**：BASE_PROMPT 增加一条：`<project_context>` 是项目自带的地图，已经能回答的问题（布局、约定、命令）直接从它回答，只验证将要改动的东西。
+- **验证**：同一个问题三次实测——无 `AGENTS.md`、无引导 25 次调用；有 `AGENTS.md`、无引导 27 次调用 / 16 回合 / 96,075 输入 token；有 `AGENTS.md` + 本引导 **4 次调用 / 3 回合 / 11,937 输入 token（−88%）**。答案质量未降，反而更准（指出了 `test_boundary.py` 的 AST 扫描与可见面收窄）。
+- **排查备注**：期间一度怀疑 `glob` 的 `mode=dirs` 失效——日志里 `glob {"pattern": "gradus/**/*", "mode": "dirs"}` 旁边就是 `(no matches)`。实测该组合正常返回 17 个目录；日志里那行 `(no matches)` 其实是同批并行调用中 `glob {"pattern": "gradus/*"}`（文件模式，`gradus/` 下确无直接文件）的结果，两行结果错位。**不要重复排查这个。**
+- **关联**：`session.py`（`BASE_PROMPT`）、仓库根 `AGENTS.md`。
