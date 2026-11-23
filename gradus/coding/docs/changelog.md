@@ -371,3 +371,22 @@ scope 阻断父写、完成通知）。
 
 现在唯一的“门槛”是**先规划**：`spawn_agent` 前必须 `plan_tasks` 建好 DAG。
 
+## 2026-11-22（第四批 / batch5）：4 题全过，且 0 次派活
+
+`--mode exec`、官方镜像、多 agent 常驻（无开关）、`--max-turns 60`、`--self-checks 1`、单并发：
+
+| 题 | 轮 | 输入 | 自检 | 官方判定 |
+| --- | --- | --- | --- | --- |
+| `django__django-10880` | 41 | 440,380 | fail | **resolved: true** |
+| `scikit-learn__scikit-learn-10844` | 42 | 551,928 | pass | **resolved: true** |
+| `pydata__xarray-3095` | 52 | 789,644 | pass | **resolved: true** |
+| `sphinx-doc__sphinx-10435` | 23 | 234,033 | pass | **resolved: true** |
+
+合计 2.0M 输入 / 91.4k 输出 / 缓存 96% / 40 分钟。
+
+**关键观察**：多 agent 已常驻且 `plan_tasks` 门槛就位，但四道题**全部 0 次 `spawn_agent`**——
+模型仍然选择自己干完。说明「模型自决」下它不认为这些任务需要分工；想观察多 agent 的真实收益，
+需要挑单 agent 会失败/超长上下文的题，而不是常规题。
+
+**累计（16 题）**：raw `resolved` **13/16**；含环境折抵（requests 两题）**15/16**。
+
