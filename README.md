@@ -27,7 +27,7 @@ cd Gradus && uv sync
 uv run gradus
 ```
 
-That last line needs a model — one three-line `.env`, see [Quick start](#quick-start).
+That last line needs a model — one three-line `.env`, see [Quick start](#-quick-start).
 
 ## 🎯 Why Gradus
 
@@ -35,13 +35,13 @@ Three claims that separate it from the usual agent harness.
 
 1. 🧠 **The session owns the transcript, not the provider.** History is stored provider-neutral and translated per request, so one session can move between Anthropic, OpenAI, and Gemini-style endpoints mid-conversation. Vendor-private fields such as thinking-block `signature` do not survive the trip; everything else does.
 2. 📦 **The agent never edits your workspace directly.** Every session runs against a copy — a `git worktree` when the workspace is a repository, a filtered tree otherwise — and changes merge back only on close. A killed session costs you nothing.
-3. 🧱 **It is a runtime, not an app.** Four packages, imports pointing one way. `ai` knows nothing above it, so you can take the protocol layer and leave the rest; `agent` hands you a loop and a facade with no CLI attached.
+3. 🧰 **It is a runtime, not an app.** Four packages, imports pointing one way. `ai` knows nothing above it, so you can take the protocol layer and leave the rest; `agent` hands you a loop and a facade with no CLI attached.
 
 ## ✨ Highlights
 
 - 🔌 **Four model protocols, one internal shape** — Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Gemini reduce to one message model plus 12 streaming events. Gemini follows the documented format and is still **in testing** (no live endpoint verified).
 - 🔁 **A tool loop with real control** — one async loop, 9 hooks, 8 run-level events, parallel tool execution, `steer` / `follow_up`, cancellation, and retries.
-- 🛡️ **Sandboxed execution** — `restricted` on Windows with no admin rights, plus `appcontainer` (deprecated), `docker`, and `local`. See [The sandbox](#the-sandbox).
+- 🛡️ **Sandboxed execution** — `restricted` on Windows with no admin rights, plus `appcontainer` (deprecated), `docker`, and `local`. See [The sandbox](#-the-sandbox).
 - 👥 **More than one agent** — multi-agent teams, background tasks, scheduled jobs, and transcript recall ship as tools in the `coding` layer.
 - 🧩 **MCP and extensions** — project-scoped MCP servers with explicit trust and OAuth, plus Python tools, slash commands, and `SKILL.md` skills loaded from `.gradus/`.
 - 🐍 **Codemode** — the model writes Python that calls `tools.*`; only `text()` / `return` enters the context.
@@ -49,7 +49,7 @@ Three claims that separate it from the usual agent harness.
 
 ## 🚀 Quick start
 
-### 🖥️ Run the CLI
+### 💻 Run the CLI
 
 ```bash
 uv sync
@@ -110,14 +110,14 @@ uv run pytest -q
 
 Everything runs offline by default. The 11 live sandbox contract checks skip unless `GRADUS_SANDBOX_LIVE=1`.
 
-## 🛡️ The sandbox
+## 🔒 The sandbox
 
 | Backend | When it is used | Boundary |
 | --- | --- | --- |
 | 🪟 `restricted` | Windows; `auto` picks it first | Restricted token (synthetic SID + logon SID + `Everyone`): reads follow your account, writes only land in the copy and scratch. **No network isolation.** No admin, no extra install. |
 | 🪟 `appcontainer` | Windows; only when `restricted` is unavailable | AppContainer token, no network, Job Object kills child processes. **Deprecated**: kept working, no further work. |
 | 🐳 `docker` | Docker engine available | Container with `--network none`, memory / CPU / PID limits. **In testing**: kept as a cross-platform fallback, not yet verified against a live engine. |
-| 💻 `local` | Fallback | None; commands run with your user privileges |
+| 🏠 `local` | Fallback | None; commands run with your user privileges |
 
 A sandbox session never edits your workspace directly. It gets a private copy — `git worktree` when the workspace is a git repository, a filtered tree copy otherwise — and the file tools and commands both operate on that copy. On close, added and modified files are written back, deletions are applied, and a failed merge keeps the copy and prints its path. Copies left behind by a killed process are removed on the next start.
 
@@ -127,7 +127,7 @@ Three boundaries worth stating plainly:
 - 🔒 **Command approval stays on.** The copy protects the host from accidental damage; it does not make arbitrary commands safe.
 - 🚫 **MCP server processes are not sandboxed.** They run on the host with your privileges. A stdio server's default `cwd` is pointed at the copy so its relative paths line up, but HTTP servers and absolute paths still reach the host.
 
-## 🏗️ Architecture
+## 🧱 Architecture
 
 ```
 gradus/host      web layer       host process, wire protocol, clock
@@ -143,7 +143,7 @@ Dependencies only point down. `ai` imports neither `agent` nor `coding`; `agent`
 1. ⬇️ **Dependencies point down only.** Upper layers may call lower ones; lower layers never see upper ones.
 2. 📡 **Events are the interface.** The 12 `ai` events are forwarded unchanged by `agent`, which only adds run-level events.
 3. ⚡ **Async all the way down.** `Provider.stream()`, `run_loop()`, and `AgentTool.execute()` are async; the loop never blocks on I/O.
-4. 🧰 **Tools belong to the upper layer.** `agent` defines the `AgentTool` protocol; file, search, and shell implementations live in `coding`.
+4. 🔧 **Tools belong to the upper layer.** `agent` defines the `AgentTool` protocol; file, search, and shell implementations live in `coding`.
 
 ## 🐍 Python API
 

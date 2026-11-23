@@ -27,7 +27,7 @@ cd Gradus && uv sync
 uv run gradus
 ```
 
-最后一行需要一个模型 —— 三段式 `.env`，见[快速开始](#快速开始)。
+最后一行需要一个模型 —— 三段式 `.env`，见[快速开始](#-快速开始)。
 
 ## 🎯 为什么是 Gradus
 
@@ -35,13 +35,13 @@ uv run gradus
 
 1. 🧠 **历史属于会话，不属于厂商。** 历史以厂商中立的表示存储，每次请求再由当前 provider 翻译，所以一个会话可以在对话中途换到 Anthropic、OpenAI、Gemini 风格的端点。厂商私有字段（如 thinking block 的 `signature`）在转换中不会保留，其余都会。
 2. 📦 **agent 不直接改你的 workspace。** 每个会话跑在副本上 —— 是 git 仓库就用 `git worktree`，否则用过滤过的目录树 —— 关闭时才合回。进程被杀，你没有任何损失。
-3. 🧱 **它是运行时，不是应用。** 四个包，import 单向。`ai` 对其上层一无所知，所以你可以只取协议层；`agent` 给你循环与门面，不附带 CLI。
+3. 🧰 **它是运行时，不是应用。** 四个包，import 单向。`ai` 对其上层一无所知，所以你可以只取协议层；`agent` 给你循环与门面，不附带 CLI。
 
 ## ✨ 特性
 
 - 🔌 **四种模型协议，一套内部形状** —— Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini 统一成一套消息模型与 12 个流式事件。Gemini 按官方格式实现，仍是**测试中**（尚未用真实端点验证）。
 - 🔁 **真正可控的工具循环** —— 单层异步循环、9 个 hook、8 个运行级事件、并行工具、`steer` / `follow_up`、取消与重试。
-- 🛡️ **沙箱执行** —— Windows 免管理员即可用的 `restricted`，另有 `appcontainer`（已弃用）、`docker`、`local`。见[沙箱](#沙箱)。
+- 🛡️ **沙箱执行** —— Windows 免管理员即可用的 `restricted`，另有 `appcontainer`（已弃用）、`docker`、`local`。见[沙箱](#-沙箱)。
 - 👥 **不止一个 agent** —— 多 agent 团队、后台任务、定时任务、历史召回，都以工具形式内置在 `coding` 层。
 - 🧩 **MCP 与扩展** —— 项目级 MCP server（显式信任 + OAuth），以及从 `.gradus/` 加载的 Python 工具、斜杠命令与 `SKILL.md` 技能。
 - 🐍 **Codemode** —— 模型写 Python 调用 `tools.*`，只有 `text()` / `return` 的结果进入上下文。
@@ -49,7 +49,7 @@ uv run gradus
 
 ## 🚀 快速开始
 
-### 🖥️ 运行 CLI
+### 💻 运行 CLI
 
 ```bash
 uv sync
@@ -110,14 +110,14 @@ uv run pytest -q
 
 默认全部离线运行。11 个沙箱实机契约用例只有在 `GRADUS_SANDBOX_LIVE=1` 时才跑。
 
-## 🛡️ 沙箱
+## 🔒 沙箱
 
 | 后端 | 使用时机 | 边界 |
 | --- | --- | --- |
 | 🪟 `restricted` | Windows；`auto` 首选 | 受限令牌（合成 SID + logon SID + `Everyone`）：读跟随你的账户，写只落在副本与 scratch。**不隔离网络。** 免管理员，无需额外安装。 |
 | 🪟 `appcontainer` | Windows；仅当 `restricted` 不可用 | AppContainer 令牌，无网络，Job Object 杀子进程。**已弃用**：保持可用，不再投入。 |
 | 🐳 `docker` | 有 Docker engine | 容器，带 `--network none`、内存 / CPU / PID 限制。**测试中**：作为跨平台兜底保留，尚未用真实 engine 验证。 |
-| 💻 `local` | 兜底 | 无；命令以你的用户权限运行 |
+| 🏠 `local` | 兜底 | 无；命令以你的用户权限运行 |
 
 沙箱会话从不直接改你的 workspace。它拿到一份私有副本 —— 是 git 仓库就用 `git worktree`，否则用过滤后的目录树 —— 文件工具与命令都作用在副本上。关闭时，新增与修改的文件写回，删除被执行；合并失败则保留副本并打印其路径。被强杀进程留下的副本，会在下次启动时清理。
 
@@ -127,7 +127,7 @@ uv run pytest -q
 - 🔒 **命令审批仍然开着。** 副本保护宿主免于误伤，但不等于让任意命令变安全。
 - 🚫 **MCP server 进程不在沙箱内。** 它们以你的权限跑在宿主上。stdio server 的默认 `cwd` 会指到副本上，让相对路径对得上，但 HTTP server 与绝对路径仍然触达宿主。
 
-## 🏗️ 架构
+## 🧱 架构
 
 ```
 gradus/host      Web 层        host 进程、wire 协议、时钟
@@ -143,7 +143,7 @@ gradus/ai        协议层        Provider、流式事件、传输
 1. ⬇️ **依赖只能向下。** 上层可以调下层，下层永远看不到上层。
 2. 📡 **事件即接口。** 12 个 `ai` 事件被 `agent` 原样转发，只追加运行级事件。
 3. ⚡ **全链路异步。** `Provider.stream()`、`run_loop()`、`AgentTool.execute()` 都是 async；循环从不阻塞在 I/O 上。
-4. 🧰 **工具属于上层。** `agent` 定义 `AgentTool` 协议；文件、搜索、shell 的实现活在 `coding`。
+4. 🔧 **工具属于上层。** `agent` 定义 `AgentTool` 协议；文件、搜索、shell 的实现活在 `coding`。
 
 ## 🐍 Python API
 
