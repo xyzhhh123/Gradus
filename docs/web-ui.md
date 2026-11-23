@@ -1,6 +1,33 @@
 # Web UI
 
-The browser client is its own bundle under `web/`, served by the Python host in `gradus/host`. [The README](../README.md#-quick-start) covers how to start both; this page covers the settings that only exist in the interface.
+The browser client is its own bundle under `web/`, served by the Python host in `gradus/host`. Two processes: the host and the bundle.
+
+## Running it
+
+Start the host first:
+
+```bash
+uv sync --extra web
+uv run gradus-serve --port 8765 --token dev
+```
+
+It prints the address to open, token included:
+
+```
+Gradus web · kimi-k2.7-code · H:\your\workspace
+open: http://127.0.0.1:8765/?token=dev
+```
+
+Then pick one:
+
+```bash
+cd web && npm install && npm run build   # host serves web/dist — open the printed address
+cd web && npm run dev                    # Vite on :5173, proxies /ws to 127.0.0.1:8765
+```
+
+With the dev server, open `http://localhost:5173/?token=dev`: the frontend reads `token` from the page URL, so it has to match `--token`. Adding `&mock=1` loads the UI against a scripted connection with no host at all.
+
+Restart the host after editing anything under `gradus/`; the frontend reloads on save by itself.
 
 ## Candidate models
 

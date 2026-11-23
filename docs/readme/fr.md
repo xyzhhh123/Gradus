@@ -92,32 +92,14 @@ Dans le REPL : `/reload` reconstruit les outils et extensions, `/command` et `/s
 
 ### 🌐 Lancer l'interface web
 
-Deux processus : l'hôte Python et le bundle navigateur. Démarre d'abord l'hôte.
+Deux processus : l'hôte Python et le bundle navigateur. Démarre l'hôte :
 
 ```bash
 uv sync --extra web
 uv run gradus-serve --port 8765 --token dev
 ```
 
-Il affiche l'adresse à ouvrir, jeton inclus :
-
-```
-Gradus web · kimi-k2.7-code · H:\your\workspace
-open: http://127.0.0.1:8765/?token=dev
-```
-
-Le jeton n'est pas optionnel : `/ws` se ferme en 4401 sans le bon. Omets `--token` et l'hôte en génère un au hasard et affiche cette URL.
-
-Ensuite, au choix :
-
-```bash
-cd web && npm install && npm run build   # l'hôte sert web/dist — ouvre l'adresse affichée
-cd web && npm run dev                    # Vite sur :5173, proxifie /ws vers 127.0.0.1:8765
-```
-
-Avec le serveur de développement, ouvre `http://localhost:5173/?token=dev` : le frontend lit `token` dans l'URL de la page, il doit donc correspondre à `--token`. Ajouter `&mock=1` charge l'interface contre une connexion scriptée, sans aucun hôte.
-
-Redémarre l'hôte après toute modification sous `gradus/` ; le frontend se recharge seul à l'enregistrement.
+Il affiche l'adresse avec le jeton inclus. Compiler le bundle, le proxy de développement, les règles du jeton, le mode mock, le sélecteur de modèles et le changement de thème : **[docs/web-ui.md](../../docs/web-ui.md)**.
 
 ### 🧪 Lancer les tests
 
@@ -164,105 +146,31 @@ Les dépendances ne pointent que vers le bas. `ai` n'importe ni `agent` ni `codi
 
 ## 🐍 API Python
 
-Fais tourner une boucle complète hors ligne — sans réseau ni clé d'API :
+`run_loop()` prend un fournisseur et une liste de messages et exécute un tour ; `Agent` conserve l'état entre les tours et possède le pool de connexions. Les deux sont asynchrones et n'ont besoin ni de la CLI, ni du sandbox, ni d'un fichier de configuration.
+
+Exécute un tour hors ligne — sans réseau ni clé d'API :
 
 ```python
-import asyncio
-
-from gradus.agent.base import LoopConfig
-from gradus.agent.loop import run_loop
-from gradus.agent.types import AgentDone
-from gradus.ai.base import ModelSpec
-from gradus.ai.providers.fake import FakeProvider
-from gradus.ai.types import UserMessage
-
-spec = ModelSpec(
-    provider="fake",
-    model="fake",
-    base_url="",
-    context_window=8192,
-    max_output_tokens=1024,
-)
-provider = FakeProvider(
-    spec,
-    scripts=[{
-        "name": "answer",
-        "steps": [
-            {"kind": "text", "chunks": ["Hello, ", "I am Gradus"]},
-            {"kind": "finish", "reason": "stop"},
-        ],
-    }],
-)
-
-async def main() -> None:
-    async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
-        if isinstance(event, AgentDone):
-            print(event.new_messages[-1].content[0].text)
-
-asyncio.run(main())
+async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
+    if isinstance(event, AgentDone):
+        print(event.new_messages[-1].content[0].text)
 ```
 
-Utilise un vrai modèle via la façade à état `Agent` :
-
-```python
-from gradus.agent.agent import Agent
-from gradus.agent.base import LoopConfig
-from gradus.ai.base import ModelSpec
-
-spec = ModelSpec(
-    provider="anthropic",
-    model="claude-sonnet-4-5",
-    base_url="https://api.anthropic.com",
-    context_window=200_000,
-    max_output_tokens=8192,
-)
-
-agent = await Agent.connect(
-    spec,
-    LoopConfig(system="You are a helpful assistant"),
-    api_key="sk-...",
-)
-try:
-    async for event in agent.prompt("hi"):
-        ...
-finally:
-    await agent.aclose()
-```
-
-`Agent.connect()` crée un `httpx.AsyncClient` et le réutilise entre les exécutions ; `aclose()` le ferme. Passe le même `client` à plusieurs appels `connect()` pour partager le pool.
+Les exemples complets — construire le faux fournisseur, parler à un vrai modèle, partager un pool de connexions — sont dans **[docs/python-api.md](../../docs/python-api.md)**.
 
 ## 📖 Référence
 
 ### 🚩 Flags de la CLI
 
-| Flag | Rôle |
-| --- | --- |
-| `--workspace` | Racine des outils et commandes (par défaut : répertoire courant) |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
-| `--service` / `--provider` / `--model` / `--base-url` | Remplacent la connexion |
-| `--resume` / `--session-dir` | Reprend une session JSONL, ou choisit où vont les nouvelles |
-| `--mcp` / `--config` | Chemins explicites pour MCP et le fichier de configuration |
-| `--untrust [path]` | Révoque la confiance de la configuration MCP d'un projet, puis quitte |
-| `--reset-sandbox` | Nettoie les copies orphelines, les autorisations AppContainer et le profil |
-| `--log` | Ajoute les événements d'outils et d'erreurs dans un JSONL |
-
-### 🧩 Modèles candidats
-
-Le sélecteur de modèles de l'interface web, le panneau de réglages et le changement de thème sont documentés dans **[docs/web-ui.md](../../docs/web-ui.md)**.
+Tous les flags, l'ordre de priorité de la configuration et les commandes du REPL : **[docs/cli.md](../../docs/cli.md)**.
 
 ### 📁 Structure
 
 ```
 Gradus/
-├── gradus/
-│   ├── ai/          # fournisseurs, protocole interne, événements de streaming, transport
-│   ├── agent/       # boucle, hooks, runtime d'outils, Agent à état
-│   ├── coding/      # configuration, sessions, outils, permissions, sandbox, MCP, CLI
-│   └── host/        # processus hôte web, protocole wire, horloge
-├── bench/           # harnais de benchmarks
-├── web/             # bundle navigateur
-├── pyproject.toml
-└── uv.lock
+├── gradus/   # ai · agent · coding · host
+├── bench/    # harnais de benchmarks
+└── web/      # bundle navigateur
 ```
 
 Python 3.13 · dépendances d'exécution : `httpx`, `httpx2`, `jsonschema`, `mcp` · gérées avec `uv`.

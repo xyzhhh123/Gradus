@@ -92,32 +92,14 @@ REPL 안에서 `/reload`는 도구와 확장을 다시 만들고, `/command`와 
 
 ### 🌐 웹 UI 실행
 
-프로세스는 두 개입니다. Python 호스트와 브라우저 번들이며, 호스트를 먼저 띄웁니다.
+프로세스는 두 개: Python 호스트와 브라우저 번들. 호스트를 먼저 띄웁니다:
 
 ```bash
 uv sync --extra web
 uv run gradus-serve --port 8765 --token dev
 ```
 
-토큰이 포함된 주소를 출력합니다:
-
-```
-Gradus web · kimi-k2.7-code · H:\your\workspace
-open: http://127.0.0.1:8765/?token=dev
-```
-
-토큰은 선택 사항이 아닙니다. 올바른 토큰이 없으면 `/ws`는 4401로 닫힙니다. `--token`을 빼면 호스트가 무작위로 생성해 그 URL을 출력합니다.
-
-그다음 둘 중 하나를 고릅니다:
-
-```bash
-cd web && npm install && npm run build   # 호스트가 web/dist를 서빙 — 출력된 주소를 여세요
-cd web && npm run dev                    # Vite는 :5173, /ws를 127.0.0.1:8765로 프록시
-```
-
-개발 서버를 쓴다면 `http://localhost:5173/?token=dev`를 엽니다. 프런트엔드는 페이지 URL에서 `token`을 읽으므로 `--token`과 일치해야 합니다. `&mock=1`을 붙이면 호스트 없이 스크립트화된 연결로 UI를 볼 수 있습니다.
-
-`gradus/` 아래를 수정하면 호스트를 재시작하세요. 프런트엔드는 저장 시 스스로 리로드됩니다.
+토큰이 포함된 주소를 출력합니다. 번들 빌드, 개발 프록시, 토큰 규칙, mock 모드, 모델 선택기와 테마 전환은 **[docs/web-ui.md](../../docs/web-ui.md)**를 참고하세요.
 
 ### 🧪 테스트 실행
 
@@ -164,105 +146,31 @@ gradus/ai        protocol layer 제공자, 스트리밍 이벤트, 전송
 
 ## 🐍 Python API
 
-네트워크도 API 키도 없이 루프 하나를 끝까지 돌려 봅니다:
+`run_loop()`는 provider와 메시지 목록을 받아 한 턴을 실행합니다. `Agent`는 같은 루프 위에서 턴 사이의 상태와 연결 풀을 유지합니다. 둘 다 async이며 CLI도 샌드박스도 설정 파일도 필요 없습니다.
+
+네트워크도 API 키도 없이 한 턴 실행:
 
 ```python
-import asyncio
-
-from gradus.agent.base import LoopConfig
-from gradus.agent.loop import run_loop
-from gradus.agent.types import AgentDone
-from gradus.ai.base import ModelSpec
-from gradus.ai.providers.fake import FakeProvider
-from gradus.ai.types import UserMessage
-
-spec = ModelSpec(
-    provider="fake",
-    model="fake",
-    base_url="",
-    context_window=8192,
-    max_output_tokens=1024,
-)
-provider = FakeProvider(
-    spec,
-    scripts=[{
-        "name": "answer",
-        "steps": [
-            {"kind": "text", "chunks": ["Hello, ", "I am Gradus"]},
-            {"kind": "finish", "reason": "stop"},
-        ],
-    }],
-)
-
-async def main() -> None:
-    async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
-        if isinstance(event, AgentDone):
-            print(event.new_messages[-1].content[0].text)
-
-asyncio.run(main())
+async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
+    if isinstance(event, AgentDone):
+        print(event.new_messages[-1].content[0].text)
 ```
 
-실제 모델은 상태를 가진 `Agent` 파사드로 씁니다:
-
-```python
-from gradus.agent.agent import Agent
-from gradus.agent.base import LoopConfig
-from gradus.ai.base import ModelSpec
-
-spec = ModelSpec(
-    provider="anthropic",
-    model="claude-sonnet-4-5",
-    base_url="https://api.anthropic.com",
-    context_window=200_000,
-    max_output_tokens=8192,
-)
-
-agent = await Agent.connect(
-    spec,
-    LoopConfig(system="You are a helpful assistant"),
-    api_key="sk-...",
-)
-try:
-    async for event in agent.prompt("hi"):
-        ...
-finally:
-    await agent.aclose()
-```
-
-`Agent.connect()`는 `httpx.AsyncClient` 하나를 만들어 여러 실행에 재사용하고, `aclose()`가 그것을 닫습니다. 같은 `client`를 여러 `connect()`에 넘기면 풀을 공유합니다.
+전체 예제 — fake provider 구성, 실제 모델 연결, 연결 풀 공유 — 는 **[docs/python-api.md](../../docs/python-api.md)**에 있습니다.
 
 ## 📖 레퍼런스
 
 ### 🚩 CLI 플래그
 
-| 플래그 | 용도 |
-| --- | --- |
-| `--workspace` | 도구와 명령의 루트 (기본값: 현재 디렉터리) |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
-| `--service` / `--provider` / `--model` / `--base-url` | 연결 설정 덮어쓰기 |
-| `--resume` / `--session-dir` | JSONL 세션 재개, 또는 새 세션 저장 위치 지정 |
-| `--mcp` / `--config` | MCP와 설정 파일 경로를 명시 |
-| `--untrust [path]` | 프로젝트 MCP 설정의 신뢰를 철회하고 종료 |
-| `--reset-sandbox` | 고아 복사본, AppContainer 부여, 프로필 정리 |
-| `--log` | 도구와 오류 이벤트를 JSONL에 추가 기록 |
-
-### 🧩 후보 모델
-
-웹 모델 선택기, 설정 패널, 테마 전환은 **[docs/web-ui.md](../../docs/web-ui.md)**에 정리되어 있습니다.
+모든 플래그, 설정 우선순위, REPL 명령: **[docs/cli.md](../../docs/cli.md)**.
 
 ### 📁 디렉터리 구조
 
 ```
 Gradus/
-├── gradus/
-│   ├── ai/          # 제공자, 내부 프로토콜, 스트리밍 이벤트, 전송
-│   ├── agent/       # 루프, 훅, 도구 런타임, 상태를 가진 Agent
-│   ├── coding/      # 설정, 세션, 도구, 권한, 샌드박스, MCP, CLI
-│   └── host/        # 웹 호스트 프로세스, wire 프로토콜, 시계
-├── bench/           # 벤치마크 하네스
-├── web/             # 브라우저 번들
-├── pyproject.toml
-└── uv.lock
+├── gradus/   # ai · agent · coding · host
+├── bench/    # 벤치마크 하네스
+└── web/      # 브라우저 번들
 ```
 
 Python 3.13 · 런타임 의존성: `httpx`, `httpx2`, `jsonschema`, `mcp` · `uv`로 관리.

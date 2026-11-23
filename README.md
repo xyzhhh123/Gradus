@@ -92,32 +92,14 @@ REPL 里：`/reload` 重建工具与扩展，`/command` 与 `/skill:name` 展开
 
 ### 🌐 运行 Web UI
 
-两个进程：Python host 与浏览器 bundle。先起 host。
+两个进程：Python host 与浏览器 bundle。先起 host：
 
 ```bash
 uv sync --extra web
 uv run gradus-serve --port 8765 --token dev
 ```
 
-它会打印带 token 的地址：
-
-```
-Gradus web · kimi-k2.7-code · H:\your\workspace
-open: http://127.0.0.1:8765/?token=dev
-```
-
-token 不是可选项：`/ws` 在没有正确 token 时会以 4401 关闭。去掉 `--token`，host 会随机生成一个并打印对应 URL。
-
-然后二选一：
-
-```bash
-cd web && npm install && npm run build   # host 直接服务 web/dist —— 打开打印的地址
-cd web && npm run dev                    # Vite 在 :5173，把 /ws 代理到 127.0.0.1:8765
-```
-
-用 dev server 时打开 `http://localhost:5173/?token=dev`：前端从页面 URL 读 `token`，所以必须与 `--token` 一致。加 `&mock=1` 可以完全不连 host，用脚本化的假连接跑 UI。
-
-改了 `gradus/` 下的东西要重启 host；前端保存即热更，不需要重启。
+它会打印带 token 的地址。构建与开发代理、token 规则、mock 模式、模型选择器与主题切换，见 **[docs/web-ui.md](docs/web-ui.md)**。
 
 ### 🧪 运行测试
 
@@ -164,105 +146,31 @@ gradus/ai        协议层        Provider、流式事件、传输
 
 ## 🐍 Python API
 
-跑通一个完整循环，离线，无需网络与 API key：
+`run_loop()` 接受一个 provider 与消息列表，跑完一轮；`Agent` 在同一条循环上保留跨轮状态与连接池。两者都是 async，不需要 CLI、沙箱或配置文件。
+
+离线跑通一轮，无需网络与 API key：
 
 ```python
-import asyncio
-
-from gradus.agent.base import LoopConfig
-from gradus.agent.loop import run_loop
-from gradus.agent.types import AgentDone
-from gradus.ai.base import ModelSpec
-from gradus.ai.providers.fake import FakeProvider
-from gradus.ai.types import UserMessage
-
-spec = ModelSpec(
-    provider="fake",
-    model="fake",
-    base_url="",
-    context_window=8192,
-    max_output_tokens=1024,
-)
-provider = FakeProvider(
-    spec,
-    scripts=[{
-        "name": "answer",
-        "steps": [
-            {"kind": "text", "chunks": ["Hello, ", "I am Gradus"]},
-            {"kind": "finish", "reason": "stop"},
-        ],
-    }],
-)
-
-async def main() -> None:
-    async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
-        if isinstance(event, AgentDone):
-            print(event.new_messages[-1].content[0].text)
-
-asyncio.run(main())
+async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
+    if isinstance(event, AgentDone):
+        print(event.new_messages[-1].content[0].text)
 ```
 
-接真实模型，用有状态的 `Agent` 门面：
-
-```python
-from gradus.agent.agent import Agent
-from gradus.agent.base import LoopConfig
-from gradus.ai.base import ModelSpec
-
-spec = ModelSpec(
-    provider="anthropic",
-    model="claude-sonnet-4-5",
-    base_url="https://api.anthropic.com",
-    context_window=200_000,
-    max_output_tokens=8192,
-)
-
-agent = await Agent.connect(
-    spec,
-    LoopConfig(system="You are a helpful assistant"),
-    api_key="sk-...",
-)
-try:
-    async for event in agent.prompt("hi"):
-        ...
-finally:
-    await agent.aclose()
-```
-
-`Agent.connect()` 创建一个 `httpx.AsyncClient` 并跨多次运行复用；`aclose()` 关闭它。把同一个 `client` 传给多个 `connect()` 可以共享连接池。
+完整示例 —— fake provider 的构造、接真实模型、连接池复用 —— 见 **[docs/python-api.md](docs/python-api.md)**。
 
 ## 📖 参考
 
 ### 🚩 CLI 参数
 
-| 参数 | 用途 |
-| --- | --- |
-| `--workspace` | 工具与命令的根目录（默认当前目录） |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
-| `--service` / `--provider` / `--model` / `--base-url` | 覆盖连接配置 |
-| `--resume` / `--session-dir` | 恢复某个 JSONL 会话，或指定新会话存放位置 |
-| `--mcp` / `--config` | 显式指定 MCP 与配置文件路径 |
-| `--untrust [path]` | 撤销某项目 MCP 配置的信任，然后退出 |
-| `--reset-sandbox` | 清理孤儿副本、AppContainer 授权与 profile |
-| `--log` | 把工具与错误事件追加到 JSONL |
-
-### 🧩 候选模型
-
-Web 的模型选择器、设置面板与主题切换，见 **[docs/web-ui.md](docs/web-ui.md)**。
+全部参数、配置优先级与 REPL 命令：**[docs/cli.md](docs/cli.md)**。
 
 ### 📁 目录
 
 ```
 Gradus/
-├── gradus/
-│   ├── ai/          # Provider、内部协议、流式事件、传输
-│   ├── agent/       # 循环、hook、工具运行时、有状态 Agent
-│   ├── coding/      # 配置、会话、工具、权限、沙箱、MCP、CLI
-│   └── host/        # Web host 进程、wire 协议、时钟
-├── bench/           # 基准测试框架
-├── web/             # 浏览器 bundle
-├── pyproject.toml
-└── uv.lock
+├── gradus/   # ai · agent · coding · host
+├── bench/    # 基准测试框架
+└── web/      # 浏览器 bundle
 ```
 
 Python 3.13 · 运行依赖：`httpx`、`httpx2`、`jsonschema`、`mcp` · 环境用 `uv` 管理。

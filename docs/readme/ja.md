@@ -92,32 +92,14 @@ REPL 内では、`/reload` がツールと拡張を再構築し、`/command` と
 
 ### 🌐 Web UI を実行する
 
-プロセスは 2 つです。Python のホストとブラウザ用バンドルで、ホストを先に起動します。
+プロセスは 2 つ：Python ホストとブラウザ用バンドル。ホストを先に起動します：
 
 ```bash
 uv sync --extra web
 uv run gradus-serve --port 8765 --token dev
 ```
 
-トークン込みのアドレスが表示されます：
-
-```
-Gradus web · kimi-k2.7-code · H:\your\workspace
-open: http://127.0.0.1:8765/?token=dev
-```
-
-トークンは任意ではありません。正しいトークンがないと `/ws` は 4401 で切断されます。`--token` を省略するとホストがランダムに生成し、その URL を表示します。
-
-次にどちらかを選びます：
-
-```bash
-cd web && npm install && npm run build   # ホストが web/dist を配信 — 表示されたアドレスを開く
-cd web && npm run dev                    # Vite は :5173、/ws を 127.0.0.1:8765 へプロキシ
-```
-
-開発サーバーを使う場合、開くのは `http://localhost:5173/?token=dev` です。フロントエンドはページ URL から `token` を読むため、`--token` と一致している必要があります。`&mock=1` を付けると、ホストなしでスクリプト化された接続に対して UI を読み込めます。
-
-`gradus/` 以下を編集したらホストを再起動してください。フロントエンドは保存時に自動でリロードされます。
+トークン込みのアドレスが出力されます。バンドルのビルド、開発プロキシ、トークンの規則、mock モード、モデル選択とテーマ切り替えは **[docs/web-ui.md](../../docs/web-ui.md)** を参照。
 
 ### 🧪 テストを実行する
 
@@ -164,105 +146,31 @@ gradus/ai        protocol layer プロバイダー、ストリーミングイベ
 
 ## 🐍 Python API
 
-ネットワークも API キーもなしで、ループを丸ごと実行できます：
+`run_loop()` は provider とメッセージ列を受け取って 1 ターン実行します。`Agent` は同じループの上でターンをまたいだ状態と接続プールを保持します。どちらも async で、CLI もサンドボックスも設定ファイルも要りません。
+
+ネットワークも API キーもなしで 1 ターン動かす：
 
 ```python
-import asyncio
-
-from gradus.agent.base import LoopConfig
-from gradus.agent.loop import run_loop
-from gradus.agent.types import AgentDone
-from gradus.ai.base import ModelSpec
-from gradus.ai.providers.fake import FakeProvider
-from gradus.ai.types import UserMessage
-
-spec = ModelSpec(
-    provider="fake",
-    model="fake",
-    base_url="",
-    context_window=8192,
-    max_output_tokens=1024,
-)
-provider = FakeProvider(
-    spec,
-    scripts=[{
-        "name": "answer",
-        "steps": [
-            {"kind": "text", "chunks": ["Hello, ", "I am Gradus"]},
-            {"kind": "finish", "reason": "stop"},
-        ],
-    }],
-)
-
-async def main() -> None:
-    async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
-        if isinstance(event, AgentDone):
-            print(event.new_messages[-1].content[0].text)
-
-asyncio.run(main())
+async for event in run_loop(provider, [UserMessage("hi")], LoopConfig(system="")):
+    if isinstance(event, AgentDone):
+        print(event.new_messages[-1].content[0].text)
 ```
 
-実際のモデルは、状態を持つ `Agent` ファサード経由で使います：
-
-```python
-from gradus.agent.agent import Agent
-from gradus.agent.base import LoopConfig
-from gradus.ai.base import ModelSpec
-
-spec = ModelSpec(
-    provider="anthropic",
-    model="claude-sonnet-4-5",
-    base_url="https://api.anthropic.com",
-    context_window=200_000,
-    max_output_tokens=8192,
-)
-
-agent = await Agent.connect(
-    spec,
-    LoopConfig(system="You are a helpful assistant"),
-    api_key="sk-...",
-)
-try:
-    async for event in agent.prompt("hi"):
-        ...
-finally:
-    await agent.aclose()
-```
-
-`Agent.connect()` は `httpx.AsyncClient` を 1 つ作成し、複数回の実行で再利用します。`aclose()` がそれを閉じます。同じ `client` を複数の `connect()` に渡せば、プールを共有できます。
+完全な例 —— fake provider の組み立て、実モデルへの接続、接続プールの共有 —— は **[docs/python-api.md](../../docs/python-api.md)** にあります。
 
 ## 📖 リファレンス
 
 ### 🚩 CLI フラグ
 
-| フラグ | 用途 |
-| --- | --- |
-| `--workspace` | ツールとコマンドのルート（既定：カレントディレクトリ） |
-| `--sandbox` | `auto` / `local` / `docker` / `appcontainer` / `restricted` |
-| `--service` / `--provider` / `--model` / `--base-url` | 接続設定を上書き |
-| `--resume` / `--session-dir` | JSONL セッションを再開、または新規の保存先を指定 |
-| `--mcp` / `--config` | MCP と設定ファイルのパスを明示 |
-| `--untrust [path]` | プロジェクトの MCP 設定の信頼を取り消して終了 |
-| `--reset-sandbox` | 孤立したコピー、AppContainer の付与、プロファイルを消去 |
-| `--log` | ツールとエラーのイベントを JSONL に追記 |
-
-### 🧩 候補モデル
-
-Web のモデルピッカー、設定パネル、テーマ切り替えは **[docs/web-ui.md](../../docs/web-ui.md)** を参照してください。
+すべてのフラグ、設定の優先順位、REPL のコマンド：**[docs/cli.md](../../docs/cli.md)**。
 
 ### 📁 ディレクトリ構成
 
 ```
 Gradus/
-├── gradus/
-│   ├── ai/          # プロバイダー、内部プロトコル、ストリーミングイベント、トランスポート
-│   ├── agent/       # ループ、フック、ツールランタイム、状態を持つ Agent
-│   ├── coding/      # 設定、セッション、ツール、権限、サンドボックス、MCP、CLI
-│   └── host/        # Web ホストのプロセス、wire プロトコル、クロック
-├── bench/           # ベンチマークハーネス
-├── web/             # ブラウザ用バンドル
-├── pyproject.toml
-└── uv.lock
+├── gradus/   # ai · agent · coding · host
+├── bench/    # ベンチマークハーネス
+└── web/      # ブラウザ用バンドル
 ```
 
 Python 3.13 · 実行時依存：`httpx`、`httpx2`、`jsonschema`、`mcp` · `uv` で管理。
