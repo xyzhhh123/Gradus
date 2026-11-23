@@ -20,6 +20,7 @@ instruction is flattened onto one line before it is piped in.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 from pathlib import Path
@@ -29,6 +30,14 @@ from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
 GRADUS_REPO = "https://github.com/xyzhhh123/Gradus/archive/refs/heads/main.tar.gz"
+
+#: Prebuilt Linux bundle (standalone CPython 3.13 + Gradus, no symlinks).
+#: Built once locally; see the README section in bench/ for the Dockerfile.
+BUNDLE = Path(os.environ.get("GRADUS_HARBOR_BUNDLE", r"H:\bench\gradus-bundle\gradus"))
+BUNDLE_TARGET = "/opt/gradus"
+#: The bundle ships its own standalone interpreter, so its lib dir must be on the
+#: loader path before the venv python will start on a distro that lacks libpython.
+BUNDLE_LD = f'export LD_LIBRARY_PATH=$(ls -d {BUNDLE_TARGET}/py/cpython-3.13*/lib)'
 
 #: Where Terminal-Bench tasks put their repository.
 WORKDIR = "/app"
@@ -79,24 +88,26 @@ class GradusAgent(BaseAgent):
     # ------------------------------------------------------------------ setup
 
     async def setup(self, environment: BaseEnvironment) -> None:
-        """Install uv, then Gradus, inside the task container."""
-        await environment.exec("command -v curl >/dev/null || (apt-get update && apt-get install -y --no-install-recommends curl)",
-                               timeout_sec=600)
-        install = (
-            "command -v uv >/dev/null || "
-            "(curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1)"
-        )
-        await environment.exec(install, timeout_sec=600)
+        """Push the prebuilt bundle into the container.
 
-        result = await environment.exec(
-            'export PATH="$HOME/.local/bin:$PATH" && '
-            f"uv tool install --python 3.13 {GRADUS_REPO}",
-            timeout_sec=1800,
+        Installing inside the task container does not work in general: Terminal-Bench
+        images include bare ``ubuntu:24.04`` with no curl, git, or python, and apt is
+        not reachable. Uploading a fixed bundle makes setup the same on every image.
+        """
+        if not BUNDLE.exists():
+            raise RuntimeError(f"agent bundle missing at {BUNDLE}")
+
+        await environment.upload_dir(BUNDLE, BUNDLE_TARGET)
+
+        check = await environment.exec(
+            f"test -x {BUNDLE_TARGET}/venv/bin/gradus && {BUNDLE_LD} && "
+            f"{BUNDLE_TARGET}/venv/bin/gradus --help >/dev/null && echo BUNDLE_OK",
+            timeout_sec=300,
         )
-        out = (result.stdout or "") + (result.stderr or "")
-        self.logger.info("gradus install (rc=%s): %s", result.return_code, out.strip()[-800:])
-        if result.return_code != 0:
-            raise RuntimeError(f"installing Gradus failed (rc={result.return_code}): {out[-800:]}")
+        out = (check.stdout or "") + (check.stderr or "")
+        self.logger.info("bundle check (rc=%s): %s", check.return_code, out.strip()[-400:])
+        if "BUNDLE_OK" not in out:
+            raise RuntimeError(f"gradus bundle did not run in the task container: {out[-600:]}")
 
     # -------------------------------------------------------------------- run
 
@@ -114,13 +125,19 @@ class GradusAgent(BaseAgent):
         # Gradus stops after 20 turns by default. Benchmark tasks need far more: one
         # task can spend dozens of turns just exploring before it edits anything.
         env.setdefault("GRADUS_MAX_TURNS", str(self._extra_env.get("max_turns", 100)))
+        # The 8192 default truncates long tool calls (a single heredoc script can burn
+        # the whole budget), and a truncated turn ends the loop without a deliverable.
+        env.setdefault(
+            "GRADUS_MAX_OUTPUT_TOKENS",
+            str(self._extra_env.get("max_output_tokens", 32768)),
+        )
 
         prompt = _flatten(instruction)
         # `--yes` is required: there is no one to answer the approval prompt in a
         # benchmark run, and stdin is closed the moment the instruction is consumed.
         command = (
-            'export PATH="$HOME/.local/bin:$PATH" && '
-            f"printf '%s\\n' {shlex.quote(prompt)} | gradus --yes"
+            f"{BUNDLE_LD} && "
+            f"printf '%s\\n' {shlex.quote(prompt)} | {BUNDLE_TARGET}/venv/bin/gradus --yes"
         )
         result = await environment.exec(
             command,
