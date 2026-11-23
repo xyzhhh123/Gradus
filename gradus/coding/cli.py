@@ -57,6 +57,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--workspace", help="工具与命令的根目录（缺省为当前目录）")
     parser.add_argument("--log", help="把工具与错误事件追加写入这个 JSONL 文件")
     parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help=(
+            "放行所有命令确认，不提示。（无人值守、CI、评测用；"
+            "沙箱边界仍然生效，但命令不再逐条过问）"
+        ),
+    )
+    parser.add_argument(
         "--session-dir",
         help="会话文件目录（缺省为 <workspace>/.gradus/sessions）",
     )
@@ -104,6 +113,12 @@ async def confirm_tool(question: str) -> bool:
         print()
         return False
     return answer.strip().lower() in {"y", "yes"}
+
+
+async def auto_confirm(question: str) -> bool:
+    """`--yes` 用：不提问直接放行，并把决定打在终端上留痕。"""
+    print(f"auto-approved: {question}")
+    return True
 
 
 def format_usage(usage: object) -> str:
@@ -271,7 +286,7 @@ async def main(argv: list[str] | None = None) -> int:
         session = await Session.connect(
             settings,
             workspace=args.workspace,
-            confirm=confirm_tool,
+            confirm=auto_confirm if args.yes else confirm_tool,
             session_dir=session_dir,
             resume=args.resume,
             mcp_config=args.mcp,
