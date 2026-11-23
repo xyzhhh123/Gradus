@@ -1,14 +1,25 @@
-# Gradus
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+</picture>
 
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
 
-[English](README.md) · [中文](README.zh.md)
-
 **分层的 Coding Agent 运行时。** Gradus 把模型的流式输出变成能调用工具的会话，并给每个会话一份私有的 workspace 副本，会话结束时再合回宿主。
 
-![Gradus Web UI：一个会话正在流式输出，并调用 bash 工具](docs/web-ui.gif)
+[English](README.md) · [中文](README.zh.md)
+
+<br>
+
+<img src="docs/web-ui.gif" alt="Gradus Web UI：一个会话正在流式输出，并调用 bash 工具" width="820">
+
+<sub>一个回合：流式回复 → <code>bash</code> 工具调用 → 结果。</sub>
+
+</div>
 
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git

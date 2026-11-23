@@ -1,14 +1,25 @@
-# Gradus
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+</picture>
 
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
 
-[English](README.md) · [中文](README.zh.md)
-
 **A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a private copy of the workspace that merges back when the session ends.
 
-![The Gradus web UI: a session streaming a reply and running a bash tool call](docs/web-ui.gif)
+[English](README.md) · [中文](README.zh.md)
+
+<br>
+
+<img src="docs/web-ui.gif" alt="The Gradus web UI: a session streaming a reply and running a bash tool call" width="820">
+
+<sub>One turn: streaming reply → <code>bash</code> tool call → its result.</sub>
+
+</div>
 
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
