@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
-  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/banner-dark.svg">
+  <img src="../../docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
 [![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
@@ -12,11 +12,11 @@
 
 **階層化されたコーディングエージェントランタイム。** Gradus はモデルのストリームをツールを使うセッションに変え、各セッションにワークスペースのプライベートコピーを与え、セッション終了時にホストへマージして戻します。
 
-[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
+[English](en.md) · [中文](../../README.md) · [日本語](ja.md) · [한국어](ko.md) · [Español](es.md) · [Français](fr.md) · [Deutsch](de.md)
 
 <br>
 
-<img src="docs/web-ui.gif" alt="Gradus の Web UI：応答をストリーミングし、bash ツールを呼び出している様子" width="820">
+<img src="../../docs/web-ui.gif" alt="Gradus の Web UI：応答をストリーミングし、bash ツールを呼び出している様子" width="820">
 
 <sub>1 ターン：ストリーミング応答 → <code>bash</code> ツール呼び出し → その結果。</sub>
 
@@ -84,7 +84,7 @@ REPL 内では、`/reload` がツールと拡張を再構築し、`/command` と
 
 <div align="center">
 
-  <img src="docs/cli-demo.gif" alt="Gradus の CLI セッション：質問、2 回のツール呼び出し、そして回答" width="900">
+  <img src="../../docs/cli-demo.gif" alt="Gradus の CLI セッション：質問、2 回のツール呼び出し、そして回答" width="900">
 
   <sub>Windows Terminal での実録：1 ターン、ツール呼び出し 2 回、そして回答。</sub>
 
@@ -248,7 +248,7 @@ finally:
 
 ### 🧩 候補モデル
 
-Web のモデルピッカー、設定パネル、テーマ切り替えは **[docs/web-ui.md](docs/web-ui.md)** を参照してください。
+Web のモデルピッカー、設定パネル、テーマ切り替えは **[docs/web-ui.md](../../docs/web-ui.md)** を参照してください。
 
 ### 📁 ディレクトリ構成
 
@@ -271,11 +271,11 @@ Python 3.13 · 実行時依存：`httpx`、`httpx2`、`jsonschema`、`mcp` · `u
 
 | 層 | README | 設計 | 計画 |
 | --- | --- | --- | --- |
-| `ai` | [README](gradus/ai/README.md) | [設計](gradus/ai/docs/design.md) | [計画](gradus/ai/ai_plan.md) |
-| `agent` | [README](gradus/agent/README.md) | [設計](gradus/agent/docs/design.md) | [計画](gradus/agent/agent_plan.md) |
-| `coding` | [README](gradus/coding/README.md) | [設計](gradus/coding/docs/design.md) | [計画](gradus/coding/coding_plan.md) |
+| `ai` | [README](../../gradus/ai/README.md) | [設計](../../gradus/ai/docs/design.md) | [計画](../../gradus/ai/ai_plan.md) |
+| `agent` | [README](../../gradus/agent/README.md) | [設計](../../gradus/agent/docs/design.md) | [計画](../../gradus/agent/agent_plan.md) |
+| `coding` | [README](../../gradus/coding/README.md) | [設計](../../gradus/coding/docs/design.md) | [計画](../../gradus/coding/coding_plan.md) |
 
-`gradus/coding/docs/` の関連資料：[サンドボックス](gradus/coding/docs/sandbox.md) · [コンテキスト設計](gradus/coding/docs/context_design.md) · [マルチエージェント](gradus/coding/docs/multi_agent.md) · [バックグラウンドタスク](gradus/coding/docs/background_tasks.md) · [スケジュール実行](gradus/coding/docs/cron_tasks.md) · [recall](gradus/coding/docs/recall.md)。
+`gradus/coding/docs/` の関連資料：[サンドボックス](../../gradus/coding/docs/sandbox.md) · [コンテキスト設計](../../gradus/coding/docs/context_design.md) · [マルチエージェント](../../gradus/coding/docs/multi_agent.md) · [バックグラウンドタスク](../../gradus/coding/docs/background_tasks.md) · [スケジュール実行](../../gradus/coding/docs/cron_tasks.md) · [recall](../../gradus/coding/docs/recall.md)。
 
 ## 🙏 謝辞
 
@@ -286,4 +286,4 @@ Gradus の階層構造、イベントモデル、ツール契約は、以下の�
 
 ## 📄 ライセンス
 
-[MIT](LICENSE)
+[MIT](../../LICENSE)

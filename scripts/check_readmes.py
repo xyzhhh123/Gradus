@@ -25,7 +25,15 @@ import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = ["README.md", "README.en.md", "README.ja.md", "README.ko.md", "README.es.md", "README.fr.md", "README.de.md"]
+FILES = [
+    "README.md",
+    "docs/readme/en.md",
+    "docs/readme/ja.md",
+    "docs/readme/ko.md",
+    "docs/readme/es.md",
+    "docs/readme/fr.md",
+    "docs/readme/de.md",
+]
 
 HEADING = re.compile(r"^(#{2,3})\s+(.*)$", re.MULTILINE)
 ANCHOR_LINK = re.compile(r"\]\(#([^)]+)\)")
@@ -65,8 +73,10 @@ def main() -> int:
         text = path.read_text(encoding="utf-8")
         texts[name] = text
 
+        # The switcher lives in every file but points at it from a different
+        # directory, so compare where the links *resolve*, not how they read.
         for line in text.splitlines():
-            if all(other in line for other in tuple(f for f in FILES)):
+            if line.startswith("[English]("):
                 switchers[name] = line.strip()
                 break
         else:
@@ -79,10 +89,20 @@ def main() -> int:
             text.count("!["),
         )
 
-    if len(set(switchers.values())) > 1:
-        problems.append("language switcher differs between files:")
-        for name, line in switchers.items():
-            problems.append(f"  {name}: {line}")
+    expected = {(ROOT / f).resolve() for f in FILES}
+    for name, line in switchers.items():
+        base = (ROOT / name).parent
+        targets = {
+            (base / t).resolve()
+            for t in re.findall(r"\]\(([^)#]+\.md)\)", line)
+        }
+        if targets != expected:
+            missing = sorted(str(p.relative_to(ROOT)) for p in expected - targets)
+            extra = sorted(str(p.relative_to(ROOT)) for p in targets - expected)
+            problems.append(
+                f"{name}: switcher does not cover every README "
+                f"(missing={missing}, unexpected={extra})"
+            )
 
     baseline = FILES[0] if FILES[0] in skeletons else None
     if baseline:
@@ -111,7 +131,7 @@ def main() -> int:
             if raw not in anchors and raw.lstrip("-") not in {a.lstrip("-") for a in anchors}:
                 problems.append(f"{name}: dead anchor #{raw}")
         for target in set(MD_LINK.findall(text)):
-            if not (ROOT / target).exists():
+            if not ((ROOT / name).parent / target).exists():
                 problems.append(f"{name}: link to missing file {target}")
 
     if problems:

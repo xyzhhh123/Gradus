@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
-  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/banner-dark.svg">
+  <img src="../../docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
 [![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
@@ -12,11 +12,11 @@
 
 **Eine geschichtete Laufzeitumgebung für Coding-Agenten.** Gradus macht aus dem Modell-Stream Sessions, die Werkzeuge benutzen, und gibt jeder Session eine private Kopie des Workspace, die beim Beenden zurückgeführt wird.
 
-[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
+[English](en.md) · [中文](../../README.md) · [日本語](ja.md) · [한국어](ko.md) · [Español](es.md) · [Français](fr.md) · [Deutsch](de.md)
 
 <br>
 
-<img src="docs/web-ui.gif" alt="Die Gradus-Weboberfläche: eine Session streamt eine Antwort und ruft ein bash-Werkzeug auf" width="820">
+<img src="../../docs/web-ui.gif" alt="Die Gradus-Weboberfläche: eine Session streamt eine Antwort und ruft ein bash-Werkzeug auf" width="820">
 
 <sub>Ein Turn: gestreamte Antwort → <code>bash</code>-Aufruf → sein Ergebnis.</sub>
 
@@ -84,7 +84,7 @@ Im REPL: `/reload` baut Werkzeuge und Erweiterungen neu, `/command` und `/skill:
 
 <div align="center">
 
-  <img src="docs/cli-demo.gif" alt="Eine echte Gradus-CLI-Session im Windows Terminal: eine Frage, zwei Werkzeugaufrufe, dann die Antwort" width="900">
+  <img src="../../docs/cli-demo.gif" alt="Eine echte Gradus-CLI-Session im Windows Terminal: eine Frage, zwei Werkzeugaufrufe, dann die Antwort" width="900">
 
   <sub>Aufgenommen im Windows Terminal: ein Turn, zwei Werkzeugaufrufe, dann die Antwort.</sub>
 
@@ -248,7 +248,7 @@ finally:
 
 ### 🧩 Kandidatenmodelle
 
-Der Modellwähler der Weboberfläche, das Einstellungsfenster und der Themenwechsel sind in **[docs/web-ui.md](docs/web-ui.md)** dokumentiert.
+Der Modellwähler der Weboberfläche, das Einstellungsfenster und der Themenwechsel sind in **[docs/web-ui.md](../../docs/web-ui.md)** dokumentiert.
 
 ### 📁 Aufbau
 
@@ -271,11 +271,11 @@ Python 3.13 · Laufzeitabhängigkeiten: `httpx`, `httpx2`, `jsonschema`, `mcp` �
 
 | Schicht | README | Design | Plan |
 | --- | --- | --- | --- |
-| `ai` | [README](gradus/ai/README.md) | [Design](gradus/ai/docs/design.md) | [Plan](gradus/ai/ai_plan.md) |
-| `agent` | [README](gradus/agent/README.md) | [Design](gradus/agent/docs/design.md) | [Plan](gradus/agent/agent_plan.md) |
-| `coding` | [README](gradus/coding/README.md) | [Design](gradus/coding/docs/design.md) | [Plan](gradus/coding/coding_plan.md) |
+| `ai` | [README](../../gradus/ai/README.md) | [Design](../../gradus/ai/docs/design.md) | [Plan](../../gradus/ai/ai_plan.md) |
+| `agent` | [README](../../gradus/agent/README.md) | [Design](../../gradus/agent/docs/design.md) | [Plan](../../gradus/agent/agent_plan.md) |
+| `coding` | [README](../../gradus/coding/README.md) | [Design](../../gradus/coding/docs/design.md) | [Plan](../../gradus/coding/coding_plan.md) |
 
-Weiterführendes in `gradus/coding/docs/`: [Sandbox](gradus/coding/docs/sandbox.md) · [Kontext-Design](gradus/coding/docs/context_design.md) · [Multi-Agent](gradus/coding/docs/multi_agent.md) · [Hintergrundaufgaben](gradus/coding/docs/background_tasks.md) · [Geplante Aufgaben](gradus/coding/docs/cron_tasks.md) · [Recall](gradus/coding/docs/recall.md).
+Weiterführendes in `gradus/coding/docs/`: [Sandbox](../../gradus/coding/docs/sandbox.md) · [Kontext-Design](../../gradus/coding/docs/context_design.md) · [Multi-Agent](../../gradus/coding/docs/multi_agent.md) · [Hintergrundaufgaben](../../gradus/coding/docs/background_tasks.md) · [Geplante Aufgaben](../../gradus/coding/docs/cron_tasks.md) · [Recall](../../gradus/coding/docs/recall.md).
 
 ## 🙏 Danksagung
 
@@ -286,4 +286,4 @@ Schichtung, Ereignismodell und Werkzeugvertrag von Gradus sind von diesen Open-S
 
 ## 📄 Lizenz
 
-[MIT](LICENSE)
+[MIT](../../LICENSE)

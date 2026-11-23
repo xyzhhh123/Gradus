@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
-  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/banner-dark.svg">
+  <img src="../../docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
 [![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
@@ -12,11 +12,11 @@
 
 **A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a private copy of the workspace that merges back when the session ends.
 
-[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
+[English](en.md) · [中文](../../README.md) · [日本語](ja.md) · [한국어](ko.md) · [Español](es.md) · [Français](fr.md) · [Deutsch](de.md)
 
 <br>
 
-<img src="docs/web-ui.gif" alt="The Gradus web UI: a session streaming a reply and running a bash tool call" width="820">
+<img src="../../docs/web-ui.gif" alt="The Gradus web UI: a session streaming a reply and running a bash tool call" width="820">
 
 <sub>One turn: streaming reply → <code>bash</code> tool call → its result.</sub>
 
@@ -84,7 +84,7 @@ Inside the REPL: `/reload` rebuilds tools and extensions, `/command` and `/skill
 
 <div align="center">
 
-  <img src="docs/cli-demo.gif" alt="A Gradus CLI session: one question, two tool calls, then a four-item answer" width="900">
+  <img src="../../docs/cli-demo.gif" alt="A Gradus CLI session: one question, two tool calls, then a four-item answer" width="900">
 
   <sub>Recorded in Windows Terminal: one turn, two tool calls, then the answer.</sub>
 
@@ -248,7 +248,7 @@ finally:
 
 ### 🧩 Candidate models
 
-The web model picker, the settings panel, and theme switching are documented in **[docs/web-ui.md](docs/web-ui.md)**.
+The web model picker, the settings panel, and theme switching are documented in **[docs/web-ui.md](../../docs/web-ui.md)**.
 
 ### 📁 Layout
 
@@ -271,11 +271,11 @@ Python 3.13 · runtime dependencies: `httpx`, `httpx2`, `jsonschema`, `mcp` · m
 
 | Layer | README | Design | Plan |
 | --- | --- | --- | --- |
-| `ai` | [README](gradus/ai/README.md) | [design](gradus/ai/docs/design.md) | [plan](gradus/ai/ai_plan.md) |
-| `agent` | [README](gradus/agent/README.md) | [design](gradus/agent/docs/design.md) | [plan](gradus/agent/agent_plan.md) |
-| `coding` | [README](gradus/coding/README.md) | [design](gradus/coding/docs/design.md) | [plan](gradus/coding/coding_plan.md) |
+| `ai` | [README](../../gradus/ai/README.md) | [design](../../gradus/ai/docs/design.md) | [plan](../../gradus/ai/ai_plan.md) |
+| `agent` | [README](../../gradus/agent/README.md) | [design](../../gradus/agent/docs/design.md) | [plan](../../gradus/agent/agent_plan.md) |
+| `coding` | [README](../../gradus/coding/README.md) | [design](../../gradus/coding/docs/design.md) | [plan](../../gradus/coding/coding_plan.md) |
 
-Background reading in `gradus/coding/docs/`: [sandbox](gradus/coding/docs/sandbox.md) · [context design](gradus/coding/docs/context_design.md) · [multi-agent](gradus/coding/docs/multi_agent.md) · [background tasks](gradus/coding/docs/background_tasks.md) · [cron tasks](gradus/coding/docs/cron_tasks.md) · [recall](gradus/coding/docs/recall.md).
+Background reading in `gradus/coding/docs/`: [sandbox](../../gradus/coding/docs/sandbox.md) · [context design](../../gradus/coding/docs/context_design.md) · [multi-agent](../../gradus/coding/docs/multi_agent.md) · [background tasks](../../gradus/coding/docs/background_tasks.md) · [cron tasks](../../gradus/coding/docs/cron_tasks.md) · [recall](../../gradus/coding/docs/recall.md).
 
 ## 🙏 Acknowledgements
 
@@ -286,4 +286,4 @@ Gradus's layering, event model, and tool contract were informed by these open-so
 
 ## 📄 License
 
-[MIT](LICENSE)
+[MIT](../../LICENSE)

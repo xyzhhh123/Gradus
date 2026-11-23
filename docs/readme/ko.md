@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
-  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/banner-dark.svg">
+  <img src="../../docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
 [![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
@@ -12,11 +12,11 @@
 
 **계층화된 코딩 에이전트 런타임.** Gradus는 모델의 스트림을 도구를 쓰는 세션으로 바꾸고, 세션마다 워크스페이스의 사설 복사본을 주며, 세션이 끝나면 호스트로 다시 병합합니다.
 
-[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
+[English](en.md) · [中文](../../README.md) · [日本語](ja.md) · [한국어](ko.md) · [Español](es.md) · [Français](fr.md) · [Deutsch](de.md)
 
 <br>
 
-<img src="docs/web-ui.gif" alt="Gradus 웹 UI: 응답을 스트리밍하고 bash 도구를 호출하는 모습" width="820">
+<img src="../../docs/web-ui.gif" alt="Gradus 웹 UI: 응답을 스트리밍하고 bash 도구를 호출하는 모습" width="820">
 
 <sub>한 턴: 스트리밍 응답 → <code>bash</code> 도구 호출 → 그 결과.</sub>
 
@@ -84,7 +84,7 @@ REPL 안에서 `/reload`는 도구와 확장을 다시 만들고, `/command`와 
 
 <div align="center">
 
-  <img src="docs/cli-demo.gif" alt="Gradus CLI 세션: 질문, 두 번의 도구 호출, 그다음 답변" width="900">
+  <img src="../../docs/cli-demo.gif" alt="Gradus CLI 세션: 질문, 두 번의 도구 호출, 그다음 답변" width="900">
 
   <sub>Windows Terminal에서 실제 녹화: 한 턴, 도구 호출 두 번, 그다음 답변.</sub>
 
@@ -248,7 +248,7 @@ finally:
 
 ### 🧩 후보 모델
 
-웹 모델 선택기, 설정 패널, 테마 전환은 **[docs/web-ui.md](docs/web-ui.md)**에 정리되어 있습니다.
+웹 모델 선택기, 설정 패널, 테마 전환은 **[docs/web-ui.md](../../docs/web-ui.md)**에 정리되어 있습니다.
 
 ### 📁 디렉터리 구조
 
@@ -271,11 +271,11 @@ Python 3.13 · 런타임 의존성: `httpx`, `httpx2`, `jsonschema`, `mcp` · `u
 
 | 계층 | README | 설계 | 계획 |
 | --- | --- | --- | --- |
-| `ai` | [README](gradus/ai/README.md) | [설계](gradus/ai/docs/design.md) | [계획](gradus/ai/ai_plan.md) |
-| `agent` | [README](gradus/agent/README.md) | [설계](gradus/agent/docs/design.md) | [계획](gradus/agent/agent_plan.md) |
-| `coding` | [README](gradus/coding/README.md) | [설계](gradus/coding/docs/design.md) | [계획](gradus/coding/coding_plan.md) |
+| `ai` | [README](../../gradus/ai/README.md) | [설계](../../gradus/ai/docs/design.md) | [계획](../../gradus/ai/ai_plan.md) |
+| `agent` | [README](../../gradus/agent/README.md) | [설계](../../gradus/agent/docs/design.md) | [계획](../../gradus/agent/agent_plan.md) |
+| `coding` | [README](../../gradus/coding/README.md) | [설계](../../gradus/coding/docs/design.md) | [계획](../../gradus/coding/coding_plan.md) |
 
-`gradus/coding/docs/`의 관련 자료: [샌드박스](gradus/coding/docs/sandbox.md) · [컨텍스트 설계](gradus/coding/docs/context_design.md) · [멀티 에이전트](gradus/coding/docs/multi_agent.md) · [백그라운드 작업](gradus/coding/docs/background_tasks.md) · [예약 작업](gradus/coding/docs/cron_tasks.md) · [recall](gradus/coding/docs/recall.md).
+`gradus/coding/docs/`의 관련 자료: [샌드박스](../../gradus/coding/docs/sandbox.md) · [컨텍스트 설계](../../gradus/coding/docs/context_design.md) · [멀티 에이전트](../../gradus/coding/docs/multi_agent.md) · [백그라운드 작업](../../gradus/coding/docs/background_tasks.md) · [예약 작업](../../gradus/coding/docs/cron_tasks.md) · [recall](../../gradus/coding/docs/recall.md).
 
 ## 🙏 감사의 말
 
@@ -286,4 +286,4 @@ Gradus의 계층 구조, 이벤트 모델, 도구 계약은 다음 오픈소스 
 
 ## 📄 라이선스
 
-[MIT](LICENSE)
+[MIT](../../LICENSE)

@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
-  <img src="docs/banner-light.svg" alt="Gradus" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/banner-dark.svg">
+  <img src="../../docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
 [![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
@@ -12,11 +12,11 @@
 
 **Un runtime por capas para agentes de código.** Gradus convierte el flujo del modelo en sesiones que usan herramientas, y da a cada sesión una copia privada del workspace que se fusiona de vuelta al terminar.
 
-[English](README.en.md) · [中文](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
+[English](en.md) · [中文](../../README.md) · [日本語](ja.md) · [한국어](ko.md) · [Español](es.md) · [Français](fr.md) · [Deutsch](de.md)
 
 <br>
 
-<img src="docs/web-ui.gif" alt="La interfaz web de Gradus: una sesión transmitiendo una respuesta y ejecutando una herramienta bash" width="820">
+<img src="../../docs/web-ui.gif" alt="La interfaz web de Gradus: una sesión transmitiendo una respuesta y ejecutando una herramienta bash" width="820">
 
 <sub>Un turno: respuesta en streaming → llamada a la herramienta <code>bash</code> → su resultado.</sub>
 
@@ -84,7 +84,7 @@ Dentro del REPL: `/reload` reconstruye herramientas y extensiones, `/command` y 
 
 <div align="center">
 
-  <img src="docs/cli-demo.gif" alt="Una sesión real de la CLI de Gradus en Windows Terminal: una pregunta, dos llamadas a herramientas y luego la respuesta" width="900">
+  <img src="../../docs/cli-demo.gif" alt="Una sesión real de la CLI de Gradus en Windows Terminal: una pregunta, dos llamadas a herramientas y luego la respuesta" width="900">
 
   <sub>Grabado en Windows Terminal: un turno, dos llamadas a herramientas y luego la respuesta.</sub>
 
@@ -248,7 +248,7 @@ finally:
 
 ### 🧩 Modelos candidatos
 
-El selector de modelos de la web, el panel de ajustes y el cambio de tema están documentados en **[docs/web-ui.md](docs/web-ui.md)**.
+El selector de modelos de la web, el panel de ajustes y el cambio de tema están documentados en **[docs/web-ui.md](../../docs/web-ui.md)**.
 
 ### 📁 Estructura
 
@@ -271,11 +271,11 @@ Python 3.13 · dependencias de ejecución: `httpx`, `httpx2`, `jsonschema`, `mcp
 
 | Capa | README | Diseño | Plan |
 | --- | --- | --- | --- |
-| `ai` | [README](gradus/ai/README.md) | [diseño](gradus/ai/docs/design.md) | [plan](gradus/ai/ai_plan.md) |
-| `agent` | [README](gradus/agent/README.md) | [diseño](gradus/agent/docs/design.md) | [plan](gradus/agent/agent_plan.md) |
-| `coding` | [README](gradus/coding/README.md) | [diseño](gradus/coding/docs/design.md) | [plan](gradus/coding/coding_plan.md) |
+| `ai` | [README](../../gradus/ai/README.md) | [diseño](../../gradus/ai/docs/design.md) | [plan](../../gradus/ai/ai_plan.md) |
+| `agent` | [README](../../gradus/agent/README.md) | [diseño](../../gradus/agent/docs/design.md) | [plan](../../gradus/agent/agent_plan.md) |
+| `coding` | [README](../../gradus/coding/README.md) | [diseño](../../gradus/coding/docs/design.md) | [plan](../../gradus/coding/coding_plan.md) |
 
-Lecturas adicionales en `gradus/coding/docs/`: [sandbox](gradus/coding/docs/sandbox.md) · [diseño de contexto](gradus/coding/docs/context_design.md) · [multiagente](gradus/coding/docs/multi_agent.md) · [tareas en segundo plano](gradus/coding/docs/background_tasks.md) · [tareas programadas](gradus/coding/docs/cron_tasks.md) · [recuperación](gradus/coding/docs/recall.md).
+Lecturas adicionales en `gradus/coding/docs/`: [sandbox](../../gradus/coding/docs/sandbox.md) · [diseño de contexto](../../gradus/coding/docs/context_design.md) · [multiagente](../../gradus/coding/docs/multi_agent.md) · [tareas en segundo plano](../../gradus/coding/docs/background_tasks.md) · [tareas programadas](../../gradus/coding/docs/cron_tasks.md) · [recuperación](../../gradus/coding/docs/recall.md).
 
 ## 🙏 Agradecimientos
 
@@ -286,4 +286,4 @@ El diseño por capas, el modelo de eventos y el contrato de herramientas de Grad
 
 ## 📄 Licencia
 
-[MIT](LICENSE)
+[MIT](../../LICENSE)
