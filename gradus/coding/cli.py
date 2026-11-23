@@ -17,6 +17,7 @@ from typing import TextIO
 
 from ..agent.types import TurnEnd
 from ..ai.envfile import load_env_file
+from ..ai.types import TextDelta
 from .config import (
     ENV_BASE_URL,
     ENV_MODEL,
@@ -137,11 +138,20 @@ async def run_once(
 ) -> None:
     """跑一轮，把事件流写到终端，需要留痕的事件写进日志。"""
     last_usage = None
+    # 状态行（[tool] / [done] / [error]）以换行开头但**不以换行结尾**，紧跟在后面的
+    # 流式文本会粘在同一行。记下这个悬空的换行，等第一段文本到达时补上。
+    pending_break = False
     async for event in session.prompt(text):
         if isinstance(event, TurnEnd):
             last_usage = event.usage
         chunk = render(event)
         if chunk:
+            if isinstance(event, TextDelta):
+                if pending_break:
+                    print()
+                    pending_break = False
+            else:
+                pending_break = not chunk.endswith("\n")
             print(chunk, end="", flush=True)
 
         line = render_log(event)
