@@ -62,17 +62,8 @@ class TaskGraph:
         self._path = Path(path) if path is not None else None
         self._tasks: dict[str, Task] = {}
         self._warnings: list[str] = []
-        #: `plan_tasks` 一次性建完图后置位；`spawn_agent` 用它做「先规划再执行」的门槛。
-        self._planned = False
         if self._path is not None:
             self._load()
-
-    @property
-    def planned(self) -> bool:
-        return self._planned
-
-    def mark_planned(self) -> None:
-        self._planned = True
 
     @property
     def path(self) -> Path | None:
@@ -92,10 +83,19 @@ class TaskGraph:
         *,
         role: str | None = None,
         model: str | None = None,
+        blocked_by: Sequence[str] = (),
     ) -> Task:
         text = subject.strip()
         if not text:
             raise TaskError("subject cannot be empty")
+
+        # 新节点还没有下游，所以这里的依赖不可能成环，只需确认它们都已存在。
+        edges: list[str] = []
+        for dependency in _ids(blocked_by):
+            if dependency not in self._tasks:
+                raise TaskError(f"unknown task: {dependency}")
+            if dependency not in edges:
+                edges.append(dependency)
 
         task = Task(
             id=f"{TASK_PREFIX}{uuid4().hex[:8]}",
@@ -103,6 +103,7 @@ class TaskGraph:
             description=description.strip(),
             role=_optional_text(role),
             model=_optional_text(model),
+            blocked_by=tuple(edges),
         )
         snapshot = copy.deepcopy(self._tasks)
         self._tasks[task.id] = task

@@ -39,49 +39,18 @@ CREATE_TASK_SPEC = ToolSpec(
                 "type": "string",
                 "description": "Optional model id from the configured candidate list",
             },
+            "blocked_by": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Task ids this task waits for. Same as calling update_task afterwards."
+                ),
+            },
         },
         "required": ["subject"],
     },
 )
 
-PLAN_TASKS_SPEC = ToolSpec(
-    name="plan_tasks",
-    description=(
-        "Create the whole task DAG in one call and mark the plan ready. Call this "
-        "BEFORE spawning any subagent: spawn_agent refuses tasks until the graph is "
-        "planned. Each node needs a key, a one-line subject and a detailed briefing "
-        "(the executor never sees this conversation). blocked_by refers to keys in the "
-        "same call, so forward references are fine."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "nodes": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "key": {"type": "string", "description": "Short id used by blocked_by"},
-                        "subject": {"type": "string"},
-                        "description": {
-                            "type": "string",
-                            "description": "Briefing: files, commands, findings, done-when",
-                        },
-                        "blocked_by": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Keys that must finish first",
-                        },
-                        "role": {"type": "string"},
-                        "model": {"type": "string"},
-                    },
-                    "required": ["key", "subject", "description"],
-                },
-            }
-        },
-        "required": ["nodes"],
-    },
-)
 
 
 UPDATE_TASK_SPEC = ToolSpec(
@@ -194,6 +163,7 @@ class CreateTaskTool:
                 _text(arguments, "description"),
                 role=_text(arguments, "role") or None,
                 model=_text(arguments, "model") or None,
+                blocked_by=tuple(_string_list(arguments.get("blocked_by"))),
             )
         except TaskError as exc:
             return ToolResult(f"cannot create task: {exc}", is_error=True)
@@ -329,89 +299,6 @@ class CompleteTaskTool:
         return ToolResult(f"{message}\nthe task graph is finished")
 
 
-class PlanTasksTool:
-    """一次性建整张 DAG：先全量校验，再建节点、连依赖、置计划标记。"""
-
-    spec = PLAN_TASKS_SPEC
-    execution_mode = "serial"
-
-    def __init__(self, graph: TaskGraph) -> None:
-        self._graph = graph
-
-    async def execute(
-        self,
-        call_id: str,
-        arguments: dict[str, Any],
-        on_update: ToolUpdateCallback | None = None,
-    ) -> ToolResult:
-        raw = arguments.get("nodes")
-        if not isinstance(raw, list) or not raw:
-            return ToolResult("nodes must be a non-empty array", is_error=True)
-
-        nodes: list[dict[str, Any]] = []
-        keys: dict[str, str] = {}
-        for index, item in enumerate(raw):
-            if not isinstance(item, dict):
-                return ToolResult(f"nodes[{index}] must be an object", is_error=True)
-            key = str(item.get("key", "")).strip()
-            subject = str(item.get("subject", "")).strip()
-            description = str(item.get("description", "")).strip()
-            if not key or not subject:
-                return ToolResult(f"nodes[{index}] needs key and subject", is_error=True)
-            if not description:
-                return ToolResult(
-                    f"nodes[{index}] ({key}) needs a description: the executor cannot "
-                    f"see this conversation, so the briefing must be self-contained",
-                    is_error=True,
-                )
-            if key in keys:
-                return ToolResult(f"duplicate key: {key}", is_error=True)
-            keys[key] = key
-            nodes.append(item)
-
-        edges: dict[str, tuple[str, ...]] = {}
-        for item in nodes:
-            key = str(item["key"]).strip()
-            blocked = item.get("blocked_by") or []
-            if not isinstance(blocked, list) or any(not isinstance(x, str) for x in blocked):
-                return ToolResult(f"blocked_by of {key} must be a string array", is_error=True)
-            unknown = [str(x) for x in blocked if str(x).strip() not in keys]
-            if unknown:
-                return ToolResult(
-                    f"blocked_by of {key} refers to unknown keys: {', '.join(unknown)}",
-                    is_error=True,
-                )
-            edges[key] = tuple(str(x).strip() for x in blocked)
-
-        cycle = _find_cycle(edges)
-        if cycle is not None:
-            return ToolResult(f"dependency cycle: {' -> '.join(cycle)}", is_error=True)
-
-        created: dict[str, str] = {}
-        for item in nodes:
-            key = str(item["key"]).strip()
-            task = self._graph.add(
-                str(item["subject"]).strip(),
-                str(item["description"]).strip(),
-                role=(str(item["role"]).strip() or None) if item.get("role") else None,
-                model=(str(item["model"]).strip() or None) if item.get("model") else None,
-            )
-            created[key] = task.id
-
-        for key, blocked in edges.items():
-            if not blocked:
-                continue
-            self._graph.update_dependencies(
-                created[key], add=tuple(created[other] for other in blocked)
-            )
-
-        self._graph.mark_planned()
-        lines = [f"planned {len(nodes)} tasks (ready to spawn):"]
-        for item in nodes:
-            key = str(item["key"]).strip()
-            deps = ", ".join(edges[key]) or "-"
-            lines.append(f"- {created[key]} [{key}] {item['subject']} (after: {deps})")
-        return ToolResult("\n".join(lines))
 
 
 def _find_cycle(edges: dict[str, tuple[str, ...]]) -> list[str] | None:
@@ -445,7 +332,6 @@ def _find_cycle(edges: dict[str, tuple[str, ...]]) -> list[str] | None:
 
 def create_task_tools(graph: TaskGraph) -> list[AgentTool]:
     return [
-        PlanTasksTool(graph),
         CreateTaskTool(graph),
         UpdateTaskTool(graph),
         ListTasksTool(graph),

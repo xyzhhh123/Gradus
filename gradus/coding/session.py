@@ -137,7 +137,7 @@ from .tools.tool_search import ToolSearchTool
 #: 编排类里要常驻的两个：建任务与等结果。其余编排工具（任务图读写、子 agent、
 #: 定时任务）默认进 `deferred`，由 `tool_search` 按需载入——普通改代码的会话
 #: 一次都用不上，却要每个请求为它们的 schema 付钱。
-RESIDENT_ORCHESTRATION = frozenset({"create_task", "wait"})
+RESIDENT_ORCHESTRATION = frozenset({"create_task", "wait"})  # 编排工具现已全部常驻，保留名字供文档引用
 BASE_PROMPT = (
     "You are Gradus, a coding assistant.\n"
     "Be concise. Use tools when needed. Never invent file contents or command output.\n"
@@ -171,13 +171,12 @@ BASE_PROMPT = (
     "tool calls in a row; it costs less context than calling them one by one.\n"
     "- recall_history fetches history that was compacted away: pass entry ids or a keyword query.\n"
     "- When sub-agent tools are listed, decide up front whether this task is worth splitting: "
-    "if yes, call plan_tasks first and then hand off (do not do the delegated work yourself); "
-    "if no, say so once and work single-agent.\n"
-    "- Task graph, sub-agent and schedule tools are NOT declared by default, so you cannot see "
-    "them. At the start of any task that will take more than a few steps, call tool_search once "
-    "(e.g. tool_search(\"plan tasks\")) to see what is available before you commit to an "
-    "approach; skip it for one-off questions. A search that matches nothing returns the full "
-    "index, and tool_search(load=[\"name\"]) then loads one by exact name.\n"
+    "if yes, build the tasks with create_task (subject + briefing + blocked_by) and then hand "
+    "off - do not do the delegated work yourself; if no, say so once and work single-agent.\n"
+    "- MCP tools from lazily-loaded servers are NOT declared, so you cannot see them. If the "
+    "user mentions a system you do not have a tool for (an issue tracker, a database, a "
+    "design tool), call tool_search once to check whether a server provides it; skip it "
+    "otherwise. A search that matches nothing returns the full index.\n"
     "- Read-only calls may run in parallel; writes and anything depending on an earlier result "
     "run in order.\n"
     "- Verify changes (run the tests or the command) before saying a task is done.\n"
@@ -385,11 +384,13 @@ def _build_tools(
     if background is not None:
         catalog.add(create_check_background_tool(background))
     if schedule is not None:
-        # 编排类默认按需加载：普通改代码的会话一次都用不上，却要每请求付 schema 钱。
-        catalog.add(create_schedule_task_tool(schedule), "deferred")
-        catalog.add(create_manage_schedules_tool(schedule), "deferred")
+        # 编排类全部直接声明：deferred 的工具模型看不见，必须主动 tool_search 才会出现，
+        # 实测在 Terminal-Bench 的题上一律 0 次 tool_search——能力等于不存在。
+        # 每请求多付的 schema 成本换「模型知道有这个能力」，这笔账划算。
+        catalog.add(create_schedule_task_tool(schedule))
+        catalog.add(create_manage_schedules_tool(schedule))
     if tasks is not None:
-        catalog.add_all(create_task_tools(tasks), "deferred")
+        catalog.add_all(create_task_tools(tasks))
     if tasks is not None and team is not None:
         # 直接声明，不进 deferred：deferred 的工具模型看不见，必须主动 tool_search 才会出现，
         # 实测 4 道题 0 次 tool_search、0 次 spawn——能力等于不存在。
@@ -401,13 +402,8 @@ def _build_tools(
             UseSkillTool(lambda: skills, skill_usage if skill_usage is not None else {})
         )
 
-    # 两步编排要常驻：建任务是「这件事要拆开做」的第一个动作，等结果（`wait`）
-    # 是拆完之后的必然动作。其余编排工具由 `tool_search` 按需载入。
-    for name in RESIDENT_ORCHESTRATION:
-        for tool in catalog.all:
-            if tool.spec.name == name:
-                catalog.promote(tool)
-                break
+    # 只有 MCP 里的工具仍走 deferred：它们的数量和 schema 由外部服务器决定，
+    # 全量声明会把上下文撑爆，而任务图/子 agent/调度这些本仓库自己的工具直接常驻。
 
     warnings: list[str] = []
     for tool in ext_tools:

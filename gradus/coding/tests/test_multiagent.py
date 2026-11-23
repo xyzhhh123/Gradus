@@ -602,7 +602,6 @@ class MultiagentRegressionTest(unittest.IsolatedAsyncioTestCase):
             require_plan=True,
         )
 
-        graph.mark_planned()
         agent = await team.spawn(task.id, scope=("pkg/",))
         await team.wait([agent.name])
 
@@ -640,7 +639,7 @@ class MultiagentRegressionTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("owned by sub-1", result.content)
             self.assertFalse((_Path(tmp) / "pkg" / "a.py").exists())
 
-    async def test_plan_tasks_builds_the_dag_and_unlocks_spawning(self):
+    async def test_create_task_builds_the_dag_and_unlocks_spawning(self):
         from gradus.coding.tools.tasks import create_task_tools
 
         graph = TaskGraph()
@@ -648,58 +647,98 @@ class MultiagentRegressionTest(unittest.IsolatedAsyncioTestCase):
         task_tools = {tool.spec.name: tool for tool in create_task_tools(graph)}
         team_tools = {tool.spec.name: tool for tool in create_multiagent_tools(lambda: team)}
 
-        # 没计划时派活被拒（先建个节点，绕过 plan 门槛看错误来源）
-        early = graph.add("early", "brief")
+        # 没有描述的任务不能派活：执行者看不到这段对话，没 brief 等于空手
+        early = graph.add("early", "")
         blocked = await team_tools["spawn_agent"].execute("c", {"task_id": early.id}, None)
         self.assertTrue(blocked.is_error)
-        self.assertIn("no plan", blocked.content)
+        self.assertIn("no description", blocked.content)
 
-        planned = await task_tools["plan_tasks"].execute(
+        # create_task 一次把节点和依赖都建好（等价于 s10 的 create_task + update_task）
+        import re
+
+        first = await task_tools["create_task"].execute(
+            "c", {"subject": "collect", "description": "read the code"}, None
+        )
+        self.assertFalse(first.is_error, first.content)
+        first_id = re.search(r"task_[0-9a-f]{8}", first.content).group(0)
+
+        second = await task_tools["create_task"].execute(
             "c",
-            {
-                "nodes": [
-                    {"key": "a", "subject": "collect", "description": "read the code"},
-                    {"key": "b", "subject": "fix", "description": "apply fix", "blocked_by": ["a"]},
-                ]
-            },
+            {"subject": "fix", "description": "apply fix", "blocked_by": [first_id]},
             None,
         )
-        self.assertFalse(planned.is_error, planned.content)
-        self.assertTrue(graph.planned)
-        self.assertEqual(len(graph.tasks()), 3)  # early + collect + fix
-        second = next(task for task in graph.tasks() if task.subject == "fix")
-        self.assertEqual(len(second.blocked_by), 1)
+        self.assertFalse(second.is_error, second.content)
+        second_id = re.search(r"task_[0-9a-f]{8}", second.content).group(0)
+        self.assertEqual(graph.get(second_id).blocked_by, (first_id,))
 
-        agent = await team.spawn(second.blocked_by[0])
+        # 依赖没完成前派活被拒；完成后可以派
+        self.assertTrue(graph.blockers(second_id))
+        claimed = await task_tools["claim_task"].execute("c", {"task_id": first_id}, None)
+        self.assertFalse(claimed.is_error, claimed.content)
+        done = await task_tools["complete_task"].execute("c", {"task_id": first_id}, None)
+        self.assertFalse(done.is_error, done.content)
+        self.assertFalse(graph.blockers(second_id))
+
+        agent = await team.spawn(second_id)
         self.assertTrue(agent.name)
         await team.aclose()
 
-    async def test_plan_tasks_rejects_cycles_and_unknown_keys(self):
+    async def test_update_task_wires_dependencies_after_the_fact(self):
         from gradus.coding.tools.tasks import create_task_tools
 
         graph = TaskGraph()
         tools = {tool.spec.name: tool for tool in create_task_tools(graph)}
+        import re
 
-        cycle = await tools["plan_tasks"].execute(
-            "c",
-            {
-                "nodes": [
-                    {"key": "a", "subject": "a", "description": "x", "blocked_by": ["b"]},
-                    {"key": "b", "subject": "b", "description": "x", "blocked_by": ["a"]},
-                ]
-            },
-            None,
+        a = await tools["create_task"].execute("c", {"subject": "a", "description": "x"}, None)
+        aid = re.search(r"task_[0-9a-f]{8}", a.content).group(0)
+        b = await tools["create_task"].execute("c", {"subject": "b", "description": "y"}, None)
+        bid = re.search(r"task_[0-9a-f]{8}", b.content).group(0)
+
+        linked = await tools["update_task"].execute(
+            "c", {"task_id": bid, "add_blocked_by": [aid]}, None
         )
-        self.assertTrue(cycle.is_error)
-        self.assertIn("cycle", cycle.content)
-        self.assertEqual(graph.tasks(), ())
+        self.assertFalse(linked.is_error, linked.content)
+        self.assertEqual(graph.get(bid).blocked_by, (aid,))
 
-        unknown = await tools["plan_tasks"].execute(
-            "c",
-            {"nodes": [{"key": "a", "subject": "a", "description": "x", "blocked_by": ["zzz"]}]},
-            None,
+        unknown = await tools["update_task"].execute(
+            "c", {"task_id": bid, "add_blocked_by": ["task_zzzzzzzz"]}, None
         )
         self.assertTrue(unknown.is_error)
+        self.assertIn("unknown task", unknown.content)
+
+
+    async def test_agent_limit_counts_running_not_total(self):
+        """串行派活不该撞上限：跑完的 agent 仍留在字典里等收消息。"""
+        graph = TaskGraph()
+        first = graph.add("one", "brief one")
+        team = AgentTeam(
+            graph, _factory(_Recorder(), delay=10.0)[0], max_agents=1
+        )
+
+        one = await team.spawn(first.id)
+        await team.close(one.name)
+        self.assertFalse(one.busy)
+
+        # 上限是 1，但上一个已经跑完了，再派一个必须成功
+        second = graph.add("two", "brief two")
+        two = await team.spawn(second.id)
+        self.assertTrue(two.name)
+        await team.aclose()
+
+    async def test_agent_limit_still_blocks_concurrent_overrun(self):
+        graph = TaskGraph()
+        graph.add("warm", "brief warm")
+        team = AgentTeam(graph, _factory(_Recorder(), delay=10.0)[0], max_agents=1)
+
+        running = graph.add("running", "brief running")
+        agent = await team.spawn(running.id)
+        self.assertTrue(agent.busy)
+
+        extra = graph.add("extra", "brief extra")
+        with self.assertRaises(AgentTeamError):
+            await team.spawn(extra.id)
+        await team.aclose()
 
     async def test_messages_carry_a_kind(self):
         graph = TaskGraph()

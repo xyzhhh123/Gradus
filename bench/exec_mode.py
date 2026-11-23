@@ -209,9 +209,10 @@ DELEGATION_HINT = """
 
 This session has subagents enabled. Work split rules:
 
-- **Plan first.** Call `plan_tasks` ONCE with every node (key, subject, detailed
-  briefing, blocked_by). `spawn_agent` refuses to run until the graph is planned,
-  and refuses nodes whose briefing is empty.
+- **Brief the work first.** Call `create_task` for every node (subject, detailed
+  briefing, `blocked_by` for dependencies) before delegating. `spawn_agent` refuses
+  nodes whose briefing is empty, and refuses tasks whose dependencies are unfinished.
+  `update_task` adds edges after the fact; `list_tasks` shows the whole graph.
 - **Your job is decompose + integrate.** Do not do a delegated task yourself.
 - Delegate only work that is independent and big enough to be worth a whole separate
   conversation (several files, or a long investigation); keep trivial edits.

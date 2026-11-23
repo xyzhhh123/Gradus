@@ -127,15 +127,12 @@ class AgentTeam:
         """认领节点、建好子会话，然后起跑；返回时它已经在跑，但没跑完。"""
         if self._closed:
             raise AgentTeamError("team is closed")
-        if len(self._agents) >= self._max_agents:
-            raise AgentTeamError(f"too many subagents (limit {self._max_agents})")
+        # 只数**正在跑**的：非 ephemeral 的 agent 跑完仍留在 `_agents` 里等收消息，
+        # 拿 len(self._agents) 当并发上限会让串行派活在第 N 次就撞墙。
+        if sum(1 for agent in self._agents.values() if agent.busy) >= self._max_agents:
+            raise AgentTeamError(f"too many running subagents (limit {self._max_agents})")
 
         task = self._graph.get(task_id)
-        if self._require_plan and not self._graph.planned:
-            raise AgentTeamError(
-                "no plan yet: call plan_tasks once to build the whole task DAG "
-                "(nodes + dependencies) before spawning subagents"
-            )
         if self._require_plan and not task.description.strip():
             raise AgentTeamError(
                 f"task {task.id} has no description: plan the task first "

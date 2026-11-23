@@ -32,10 +32,9 @@ MAX_INDEX = 30
 TOOL_SEARCH_SPEC = ToolSpec(
     name="tool_search",
     description=(
-        "Find tools that are not declared yet (MCP servers, task graph, sub-agents, "
-        "schedules) and load them for the next call. Give `query` to search, or `load` "
-        "with exact tool names. If the query matches nothing you get the full index — "
-        "then load by name."
+        "Find tools that are not declared yet (lazily-loaded MCP servers) and load them "
+        "for the next call. Give `query` to search, or `load` with exact tool names. If "
+        "the query matches nothing you get the full index — then load by name."
     ),
     parameters={
         "type": "object",

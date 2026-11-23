@@ -490,24 +490,21 @@ class TaskToolsWiringTest(unittest.TestCase):
 
         direct = [tool.spec.name for tool in with_graph]
         self.assertNotIn("create_task", [tool.spec.name for tool in without])
-        # 建任务要常驻（「这件事得拆开做」的第一个动作），其余任务工具按需加载
-        self.assertIn("create_task", direct)
-        self.assertNotIn("complete_task", direct)
-        assert search is not None
-        deferred = sorted(tool.spec.name for tool in search._pool)
-        self.assertEqual(
-            deferred,
-            [
-                "claim_task",
-                "complete_task",
-                "get_task",
-                "list_tasks",
-                "plan_tasks",
-                "update_task",
-            ],
-        )
-        # 有按需工具时 tool_search 自己必须常驻，否则模型没有入口去加载它们
-        self.assertIn("tool_search", direct)
+        # 任务图工具全部直接声明：deferred 的工具模型看不见，实测在评测里 0 次
+        # tool_search，能力等于不存在。只有 MCP 的工具仍按需加载。
+        for name in (
+            "create_task",
+            "update_task",
+            "get_task",
+            "claim_task",
+            "complete_task",
+            "get_task",
+            "list_tasks",
+            "update_task",
+        ):
+            self.assertIn(name, direct)
+        # 没有任何按需工具时，tool_search 不该出现
+        self.assertIsNone(search)
 
     def test_task_tools_are_allowed_by_the_default_policy(self):
         from gradus.coding.permissions import Policy
