@@ -37,7 +37,7 @@ BUNDLE = Path(os.environ.get("GRADUS_HARBOR_BUNDLE", r"H:\bench\gradus-bundle\gr
 BUNDLE_TARGET = "/opt/gradus"
 #: The bundle ships its own standalone interpreter, so its lib dir must be on the
 #: loader path before the venv python will start on a distro that lacks libpython.
-BUNDLE_LD = f'export LD_LIBRARY_PATH=$(ls -d {BUNDLE_TARGET}/py/cpython-3.13*/lib)'
+BUNDLE_LD = f'export LD_LIBRARY_PATH=$(ls -d {BUNDLE_TARGET}/py/cpython-3.13*/lib 2>/dev/null | head -1)'
 
 #: Where Terminal-Bench tasks put their repository.
 WORKDIR = "/app"
