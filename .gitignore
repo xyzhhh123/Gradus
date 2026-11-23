@@ -29,6 +29,8 @@ Thumbs.db
 # 评测产物（轨迹、补丁、容器日志）
 bench/runs/
 bench/build-context/
+# Harbor 在仓库根目录建的工作目录（每次 harbor run 一份）
+jobs/
 
 # 录屏素材（只提交转好的 gif）
 *.mp4
