@@ -317,7 +317,6 @@ async def run_task_exec(
     max_turns: int = 100,
     checks: int = 2,
     keep_container: bool = False,
-    multiagent: bool = False,
 ) -> TaskResult:
     """exec 模式跑一题：起容器 → 预检 → 跑 → 自检 → 取 patch → 删容器。"""
     workspace = Path(task.workspace).expanduser().resolve()
@@ -371,12 +370,9 @@ async def run_task_exec(
                 workspace=workspace,
                 session_dir=run_dir / "sessions" / task.id,
                 confirm=_approve_all,
-                multiagent=multiagent,
                 interactive=False,
             )
-            team = None
-            if multiagent:
-                team = _build_team(one, trace, result)
+            team = _build_team(one, trace, result)
 
             async def consume(prompt: str) -> None:
                 nonlocal error
@@ -422,10 +418,9 @@ async def run_task_exec(
                         trace.record("error", kind=event.kind, message=event.message)
 
             prompt = task.instruction + "\n\n" + container_mod.TEST_HINT
-            if multiagent:
-                prompt += DELEGATION_HINT
-                if os.environ.get("GRADUS_MA_FORCE") == "1":
-                    prompt += (
+            prompt += DELEGATION_HINT
+            if os.environ.get("GRADUS_MA_FORCE") == "1":
+                prompt += (
                         "\n\nFor this run you MUST delegate: create a task with the task "
                         "tools, call spawn_agent on it, and wait for its result before you "
                         "finish your own answer."

@@ -160,7 +160,6 @@ async def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-turns", type=int, default=60, help="每题最多几次模型请求")
     parser.add_argument("--workers", type=int, default=1, help="同时跑几题（每题一个容器）")
     parser.add_argument("--self-checks", type=int, default=2, help="exec 模式：失败后再给几次修复机会")
-    parser.add_argument("--multiagent", action="store_true", help="exec 模式：启用多 agent 团队")
     parser.add_argument(
         "--allow-network",
         action="store_true",
@@ -223,7 +222,6 @@ async def main(argv: list[str] | None = None) -> int:
                 timeout_seconds=args.timeout,
                 max_turns=args.max_turns,
                 checks=args.self_checks,
-                multiagent=args.multiagent,
             )
         if args.mode == "container":
             return await asyncio.to_thread(

@@ -158,7 +158,6 @@ async def main(argv: list[str] | None = None) -> int:
         workspace=workspace,
         session_dir=output / "sessions",
         confirm=_approve_all,
-                multiagent=False,
         interactive=False,
     )
 

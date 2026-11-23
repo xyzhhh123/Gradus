@@ -261,7 +261,7 @@ await asyncio.wait(pending, timeout=timeout)
 
 ### 4. bench 接入与实测
 
-- `bench/run.py --multiagent`；`exec_mode` 建 `AgentTeam(..., require_plan=True)` 并回填；
+- `bench/run.py` 不再有开关：`exec_mode` 每次都建 `AgentTeam(..., require_plan=True)` 并回填；
 - `TaskResult` 新增 `multiagent / subagents / sub_input / sub_output`，轨迹新增
   `multiagent` 与 `subagent_turn`，报告多一行子 agent 统计；
 - 启用时任务消息追加 `DELEGATION_HINT`（先 `plan_tasks`、派活带 `files`、`wait` 后集成）；

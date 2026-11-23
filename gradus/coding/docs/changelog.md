@@ -360,3 +360,14 @@ django 那题：模型改的是 `django/core/validators.py` 的 URL 正则，而
 **测试**：1002 passed（新增：计划建图/环检测/未知 key、无计划拒绝派活、kind 校验、
 scope 阻断父写、完成通知）。
 
+## 2026-11-22（收尾）：删掉 multi-agent 的“关闭模式”
+
+多 agent 是常驻能力，不该有开关。改动：
+
+- `Session.connect` 删除 `multiagent` 参数，团队槽位永远创建，`spawn_agent` 等工具永远注册；
+- `bench/run.py` 删除 `--multiagent`，`exec_mode` 与 `container_task` 不再传该参数；
+- bench 每次跑都会建 `AgentTeam(require_plan=True)` 并记账子 agent 用量；
+- `GRADUS_MA_FORCE=1` 仅保留为“强制派活”的冒烟开关，不影响能力注册。
+
+现在唯一的“门槛”是**先规划**：`spawn_agent` 前必须 `plan_tasks` 建好 DAG。
+

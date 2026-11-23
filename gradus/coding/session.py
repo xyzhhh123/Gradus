@@ -1245,7 +1245,6 @@ class Session:
         resume: str | Path | None = None,
         mcp_config: str | Path | None = None,
         interactive: bool | None = None,
-        multiagent: bool = True,
     ) -> Session:
         """用启动配置装配一个会话。
 
@@ -1372,9 +1371,8 @@ class Session:
 
         # 团队在会话之后创建（它需要本会话的 `spawn` 与 `notify`），
         # 所以工具先拿一个间接引用，宿主建好团队后再回填。
-        # `multiagent=False`（bench / 无头调用）不建槽位，也就不注册多 agent 工具：
-        # 注册了却没人回填团队，模型只会看到一组“一调就报错”的工具。
-        team_cell: list[AgentTeam | None] | None = [None] if multiagent else None
+        # 团队槽位永远存在：多 agent 是常驻能力，宿主建好团队后回填引用。
+        team_cell: list[AgentTeam | None] | None = [None]
         # recall 工具同理：会话构造完之后才能提供历史与预算。
         recall_hooks = RecallHooks()
         recall_tool = RecallHistoryTool(recall_hooks)
