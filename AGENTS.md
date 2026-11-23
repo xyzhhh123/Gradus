@@ -29,7 +29,7 @@ uv run pytest -q                 # full suite, offline, ~80s
 uv run pytest -q gradus/coding/tests/test_session.py   # one file
 uv run gradus                     # CLI (needs a model configured)
 uv run gradus-serve --port 8765 --token dev   # web host
-uv run python scripts/check_readmes.py        # keep the four READMEs in sync
+uv run python scripts/check_readmes.py        # keep the seven READMEs in sync
 ```
 
 15 live checks are skipped by default: sandbox contracts need `GRADUS_SANDBOX_LIVE=1`, container tests need `GRADUS_DOCKER_LIVE=1`.
