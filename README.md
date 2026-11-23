@@ -11,7 +11,7 @@
 
 **A layered coding-agent runtime.** Gradus turns model streams into tool-using sessions, and gives every session a private copy of the workspace that merges back when the session ends.
 
-[English](README.md) · [中文](README.zh.md)
+[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 <br>
 
