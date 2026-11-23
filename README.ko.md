@@ -5,6 +5,7 @@
   <img src="docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
+[![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
@@ -21,13 +22,13 @@
 
 </div>
 
+Python 3.13과 모델이 필요합니다 — `.env`에 세 줄. 자세한 절차는 [빠른 시작](#-빠른-시작)에 있습니다.
+
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
 cd Gradus && uv sync
 uv run gradus
 ```
-
-마지막 줄에는 모델이 필요합니다 — 세 줄짜리 `.env` 하나면 됩니다. [빠른 시작](#-빠른-시작)을 참고하세요.
 
 ## 🎯 Gradus란
 
@@ -108,7 +109,7 @@ cd web && npm run dev                    # Vite는 :5173, /ws를 127.0.0.1:8765�
 uv run pytest -q
 ```
 
-기본적으로 전부 오프라인으로 실행됩니다. 11개의 샌드박스 실기 계약 테스트는 `GRADUS_SANDBOX_LIVE=1`일 때만 실행됩니다.
+오프라인에서 1002개가 약 95초에 통과합니다. 별도로 15개의 실기 검사가 기본적으로 건너뛰어집니다. 샌드박스 계약은 `GRADUS_SANDBOX_LIVE=1`, 컨테이너 테스트는 `GRADUS_DOCKER_LIVE=1`이 필요합니다.
 
 ## 🔒 샌드박스
 
@@ -231,23 +232,7 @@ finally:
 
 ### 🧩 후보 모델
 
-`~/.gradus/config.json`(또는 `--config`가 가리키는 파일)에 후보 목록을 둘 수 있고, 웹 모델 선택기가 이를 직접 읽습니다:
-
-```json
-{
-  "models": [
-    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
-  ]
-}
-```
-
-각 항목은 최상위와 같은 연결 필드(`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`)를 받습니다. `name`은 UI에 표시되는 이름이고, `api_key`를 생략하면 현재 키를 재사용합니다. 이 목록은 파일에서만 읽힙니다 — 환경 변수는 여전히 현재 모델만 설명합니다.
-
-JSON을 손으로 고칠 필요는 없습니다. 웹 헤더의 톱니바퀴 아이콘이 설정 패널을 열어 후보 모델을 추가·수정·삭제해 줍니다(키를 되돌려 보여 주지는 않습니다). 마지막으로 고른 모델은 최상위 `"active"` 필드에 기록되어 다음 시작 시 복원됩니다. 패널의 "Appearance"에서는 light / dark / 시스템 따르기를 전환할 수 있습니다(설정 파일이 아니라 브라우저 localStorage에 저장됩니다).
-
-전환해도 새 세션이 시작되지는 않습니다. 히스토리는 제공자 중립적인 표현이고 요청마다 활성 제공자가 번역하므로, 하나의 세션이 `openai_compat`·`anthropic`·`openai_responses` 사이를 이동할 수 있습니다. thinking 블록의 `signature` 같은 벤더 전용 필드는 변환되지 않고 버려지거나 그대로 통과할 수 있습니다.
+웹 모델 선택기, 설정 패널, 테마 전환은 **[docs/web-ui.md](docs/web-ui.md)**에 정리되어 있습니다.
 
 ### 📁 디렉터리 구조
 

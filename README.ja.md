@@ -5,6 +5,7 @@
   <img src="docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
+[![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
@@ -21,13 +22,13 @@
 
 </div>
 
+Python 3.13 とモデルが必要です — `.env` に 3 行。手順は[クイックスタート](#-クイックスタート)にあります。
+
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
 cd Gradus && uv sync
 uv run gradus
 ```
-
-最後の行にはモデルが必要です — 3 行の `.env` をひとつ用意してください。[クイックスタート](#-クイックスタート)を参照。
 
 ## 🎯 Gradus とは
 
@@ -108,7 +109,7 @@ cd web && npm run dev                    # Vite は :5173、/ws を 127.0.0.1:87
 uv run pytest -q
 ```
 
-既定ではすべてオフラインで実行されます。11 個のサンドボックス実機契約テストは、`GRADUS_SANDBOX_LIVE=1` のときだけ実行されます。
+オフラインで 1002 件が約 95 秒で通過します。別に 15 件の実機チェックが既定でスキップされます。サンドボックス契約は `GRADUS_SANDBOX_LIVE=1`、コンテナテストは `GRADUS_DOCKER_LIVE=1` が必要です。
 
 ## 🔒 サンドボックス
 
@@ -231,23 +232,7 @@ finally:
 
 ### 🧩 候補モデル
 
-`~/.gradus/config.json`（または `--config` が指すファイル）に候補リストを持たせられ、Web のモデルピッカーがそれを直接読みます：
-
-```json
-{
-  "models": [
-    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
-  ]
-}
-```
-
-各エントリはトップレベルと同じ接続フィールド（`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`）を受け付けます。`name` は UI に表示される名前で、`api_key` を省略すると現在のキーを再利用します。このリストはファイルからのみ読まれます — 環境変数は今のモデルだけを表します。
-
-JSON を手で編集する必要はありません。Web ヘッダーの歯車アイコンが設定パネルを開き、候補モデルの追加・編集・削除ができます（キーを返すことはありません）。最後に選んだモデルはトップレベルの `"active"` フィールドに書き込まれ、次回起動時に復元されます。パネルの「Appearance」では light / dark / システム追従も切り替えられます（設定ファイルではなくブラウザの localStorage に保存されます）。
-
-切り替えても新しいセッションは始まりません。履歴はプロバイダー中立の表現で、リクエストごとに有効なプロバイダーが翻訳するため、ひとつのセッションが `openai_compat`・`anthropic`・`openai_responses` の間を移動できます。thinking ブロックの `signature` のようなベンダー固有フィールドは変換されず、破棄されるかそのまま通過する可能性があります。
+Web のモデルピッカー、設定パネル、テーマ切り替えは **[docs/web-ui.md](docs/web-ui.md)** を参照してください。
 
 ### 📁 ディレクトリ構成
 

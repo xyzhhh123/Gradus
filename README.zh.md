@@ -5,6 +5,7 @@
   <img src="docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
+[![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
@@ -21,13 +22,13 @@
 
 </div>
 
+需要 Python 3.13，以及一个模型（`.env` 里三行）。完整步骤见[快速开始](#-快速开始)。
+
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
 cd Gradus && uv sync
 uv run gradus
 ```
-
-最后一行需要一个模型 —— 三段式 `.env`，见[快速开始](#-快速开始)。
 
 ## 🎯 为什么是 Gradus
 
@@ -108,7 +109,7 @@ cd web && npm run dev                    # Vite 在 :5173，把 /ws 代理到 12
 uv run pytest -q
 ```
 
-默认全部离线运行。11 个沙箱实机契约用例只有在 `GRADUS_SANDBOX_LIVE=1` 时才跑。
+离线跑 1002 个用例通过，约 95 秒。另有 15 个实机用例默认跳过：沙箱契约需要 `GRADUS_SANDBOX_LIVE=1`，容器测试需要 `GRADUS_DOCKER_LIVE=1`。
 
 ## 🔒 沙箱
 
@@ -231,23 +232,7 @@ finally:
 
 ### 🧩 候选模型
 
-`~/.gradus/config.json`（或 `--config` 指向的文件）可以带一份候选列表，Web 的模型选择器直接读它：
-
-```json
-{
-  "models": [
-    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
-  ]
-}
-```
-
-每一项接受与顶层相同的连接字段（`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`）；`name` 是 UI 显示的名字，省略 `api_key` 则复用当前 key。列表只从文件读 —— 环境变量仍然只描述当前模型。
-
-不必手写 JSON：Web 头部的齿轮图标会打开设置面板，可增删改候选模型（从不回显 key）。最后选中的模型写入顶层 `"active"` 字段，下次启动恢复。面板里的 "Appearance" 还能切浅色 / 深色 / 跟随系统（存在浏览器 localStorage，不写配置文件）。
-
-切换不会新开会话：历史是厂商中立的表示，每次请求由当前 provider 翻译，所以一个会话可以在 `openai_compat`、`anthropic`、`openai_responses` 之间移动。厂商私有字段（如 thinking block 的 `signature`）不会被转换，可能被丢弃或原样透传。
+Web 的模型选择器、设置面板与主题切换，见 **[docs/web-ui.md](docs/web-ui.md)**。
 
 ### 📁 目录
 

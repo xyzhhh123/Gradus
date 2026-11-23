@@ -1,14 +1,30 @@
 [project]
 name = "gradus"
 version = "0.1.0"
-description = "Gradus: a layered agent runtime"
+description = "A layered coding-agent runtime: provider-neutral sessions, a sandboxed workspace copy per session"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
+keywords = ["agent", "coding-agent", "llm", "anthropic", "openai", "gemini", "mcp", "sandbox", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "httpx>=0.28.1",
     "httpx2>=2.16.0",
     "jsonschema>=4.26.0",
     "mcp>=2.3.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/xyzhhh123/Gradus"
+Repository = "https://github.com/xyzhhh123/Gradus"
+Issues = "https://github.com/xyzhhh123/Gradus/issues"
 
 [project.scripts]
 gradus = "gradus.coding.cli:cli"

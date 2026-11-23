@@ -5,6 +5,7 @@
   <img src="docs/banner-light.svg" alt="Gradus" width="440">
 </picture>
 
+[![CI](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml/badge.svg)](https://github.com/xyzhhh123/Gradus/actions/workflows/ci.yml)
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square)
 ![License MIT](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)
 ![Status pre-1.0](https://img.shields.io/badge/status-pre--1.0-fb923c?style=flat-square)
@@ -21,13 +22,13 @@
 
 </div>
 
+Needs Python 3.13 plus a model: three lines in `.env`. Full steps in [Quick start](#-quick-start).
+
 ```bash
 git clone https://github.com/xyzhhh123/Gradus.git
 cd Gradus && uv sync
 uv run gradus
 ```
-
-That last line needs a model — one three-line `.env`, see [Quick start](#-quick-start).
 
 ## 🎯 Why Gradus
 
@@ -108,7 +109,7 @@ Restart the host after editing anything under `gradus/`; the frontend reloads on
 uv run pytest -q
 ```
 
-Everything runs offline by default. The 11 live sandbox contract checks skip unless `GRADUS_SANDBOX_LIVE=1`.
+1002 tests pass offline in about 95 seconds. Another 15 are live checks that skip by default: sandbox contracts need `GRADUS_SANDBOX_LIVE=1`, container tests need `GRADUS_DOCKER_LIVE=1`.
 
 ## 🔒 The sandbox
 
@@ -231,23 +232,7 @@ finally:
 
 ### 🧩 Candidate models
 
-`~/.gradus/config.json` (or whatever `--config` points at) may carry a candidate list; the web model picker reads it directly:
-
-```json
-{
-  "models": [
-    { "name": "Kimi · Chat", "service": "kimi-compat", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Messages", "service": "kimi-anthropic", "model": "kimi-k2.7-code" },
-    { "name": "Kimi · Responses", "service": "kimi-responses", "model": "kimi-k2.7-code" }
-  ]
-}
-```
-
-Each entry accepts the same connection fields as the top level (`service` / `provider` / `model` / `base_url` / `api_key` / `context_window` / `max_output_tokens`); `name` is what the UI shows, and an omitted `api_key` reuses the current one. The list is read from the file only — environment variables still describe just the current model.
-
-You do not have to hand-edit the JSON: the gear icon in the web header opens a settings panel that adds, edits, and removes candidate models for you (it never echoes keys back). The last model you pick is written to the top-level `"active"` field and restored on the next start. The panel's "Appearance" section also switches between light / dark / follow-system (kept in browser localStorage, not the config file).
-
-Switching does not start a new session: history is the provider-neutral representation, translated per request by whichever provider is active, so one session can move between `openai_compat`, `anthropic`, and `openai_responses`. Vendor-private fields such as thinking-block `signature` are not converted and may be dropped or passed through unchanged.
+The web model picker, the settings panel, and theme switching are documented in **[docs/web-ui.md](docs/web-ui.md)**.
 
 ### 📁 Layout
 

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Windows only for now: the `restricted` sandbox backend is the primary
+    # target and the suite is verified there. Linux is not yet exercised.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      # The `web` extra is required: gradus/host tests import the host,
+      # which needs starlette.
+      - name: Install
+        run: uv sync --locked --extra web
+
+      - name: Test
+        run: uv run pytest -q
+
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check the four READMEs stay in sync
+        run: uv run --no-project python scripts/check_readmes.py
