@@ -159,7 +159,7 @@ gradus/ai/
 ├── types.py                    # internal protocol: messages, content blocks, 12 stream events
 ├── base.py                     # public interface: Request, ModelSpec, ToolSpec, Provider protocol
 ├── stream_assembler.py         # shared assembler: blocks, partial snapshots, content_index
-├── transport.py                # transport: POST, SSE parsing, retries, failure mapping
+├── transport.py                # transport: POST, SSE parsing, retries, stall guard, failure mapping
 ├── envfile.py                  # `.env` parsing: file wins, blanks skipped; shared with the coding CLI
 ├── services.py                 # built-in services: name -> (protocol, base_url) + the headers that service requires
 ├── models.py                   # model capabilities (window / output limit) + optional /models probe

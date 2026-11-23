@@ -40,7 +40,7 @@ README 讲这一层对外是什么形状；这里讲每个文件内部怎么做�
 | 入口 | 说明 |
 | --- | --- |
 | `parse_sse(lines) -> Iterator[SseEvent]` | 纯函数、同步。空行分记录、`:` 注释、多行 `data:` 用 `\n` 拼接、`[DONE]` 原样保留。可拿录制文本离线断言。 |
-| `post_sse(url, headers=, payload=, client=) -> AsyncIterator[SseEvent \| TransportFailure]` | 异步流式 POST。除 `asyncio.CancelledError` 外不抛异常；429 / 5xx / 连接失败按指数退避重试，且只在「尚未吐出任何事件」时重试，避免内容重复。 |
+| `post_sse(url, headers=, payload=, client=) -> AsyncIterator[SseEvent \| TransportFailure]` | 异步流式 POST。除 `asyncio.CancelledError` 外不抛异常；429 / 5xx / 连接失败 / 停滞按指数退避重试，且只在「尚未吐出任何事件」时重试，避免内容重复。 |
 
 两个入口共用内部状态机 `_SseParser`：同步 `parse_sse` 与 `_parse_sse_async` 只是喂数据的方式不同，
 切分规则只有一份。
@@ -53,6 +53,16 @@ README 讲这一层对外是什么形状；这里讲每个文件内部怎么做�
 `finally` 里 `await` 关闭下一层；否则被抛弃的生成器要等事件循环关闭才被 GC 收尾，那时它正
 处于自己的 `athrow` 中，会报 `aclose(): asynchronous generator is already running`。
 provider 在收到 `[DONE]` 时是 `break` 退出循环的，所以这一条不是理论问题。
+
+**停滞看门狗**：`httpx` 的 `read` 超时量的是 socket 读取，每收到一个数据块就重置。
+上游只要持续发 SSE 保活注释（`: ping`），停滞的补全就永远等不到超时——而这些注释在
+`_parse_sse_async` 里会被丢弃，上层看到的是一片沉默。实测就撞过一次：某个补全卡了
+17 分钟，进程 CPU 完全不动、TCP 连接挂着、一个事件都不来，只能等外层 8 小时超时才结束。
+
+所以 `_guard_stall` 改成量**解析出的事件**：两次事件间隔超过 `stall_timeout`
+（默认 `DEFAULT_STALL_TIMEOUT` 120 秒，可用 `GRADUS_STALL_TIMEOUT` 覆盖）就中止这一流
+并断开连接。重试策略沿用原约定：停滞发生在交付任何事件之前 → 重发安全，走重试；
+已经交付过事件再停滞 → 重发会造成重复内容，直接给 `TransportFailure`。
 
 `client` 可注入：测试用 `httpx.MockTransport` 就能完全离线；上层注入一个长期存活的
 `httpx.AsyncClient` 即可共享连接池，注入的 client 由调用方关闭。不注入时每次 `post_sse`
@@ -385,8 +395,12 @@ uv run pytest
 ### `tests/test_transport.py`
 
 SSE 解析的 9 条断言（单条记录、多行 data、注释与未知字段、CRLF、空 data、`[DONE]` 哨兵）
-加上 `post_sse` 的 5 条：正常流派、429 后重试成功、401 不重试、连接失败重试用尽、
-非 UTF-8 字节不抛异常。全部走 `httpx.MockTransport`，不碰网络。
+加上 `post_sse` 的 8 条：正常流派、429 后重试成功、401 不重试、连接失败重试用尽、
+非 UTF-8 字节不抛异常，以及停滞看门狗三条（停滞在交付事件前会重试、正常流派不重发、
+`GRADUS_STALL_TIMEOUT` 的取值与非法值回退）。全部走 `httpx.MockTransport`，不碰网络。
+
+停滞用 `_StalledStream` 模拟：先发一条保活注释（`: keep-alive`）、之后永远不再产出。
+这正是 `read` 超时抓不到的情形——socket 上有字节流过，但一个 SSE 事件都解析不出来。
 
 ### `tests/adapter.py`
 
