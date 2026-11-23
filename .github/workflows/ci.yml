@@ -28,7 +28,16 @@ jobs:
         run: uv sync --locked --extra web
 
       - name: Test
-        run: uv run pytest -q
+        shell: bash
+        run: |
+          set +e
+          uv run pytest -q --tb=line > "$RUNNER_TEMP/pytest.log" 2>&1
+          status=$?
+          # Failures are re-emitted as check-run annotations, which stay readable
+          # from the API without authenticated log access.
+          grep -E "^(FAILED|ERROR)" "$RUNNER_TEMP/pytest.log" | head -40 | sed 's/^/::error::/'
+          tail -30 "$RUNNER_TEMP/pytest.log" | sed 's/^/::notice::/'
+          exit $status
 
   readme:
     runs-on: ubuntu-latest
