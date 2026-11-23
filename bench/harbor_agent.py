@@ -143,7 +143,7 @@ class GradusAgent(BaseAgent):
             command,
             cwd=WORKDIR,
             env=env,
-            timeout_sec=int(self._extra_env.get("timeout_sec", 3600)),
+            timeout_sec=int(self._extra_env.get("timeout_sec", 28800)),
         )
         output = (result.stdout or "") + (result.stderr or "")
 
