@@ -133,8 +133,8 @@ class AgentTeam:
         task = self._graph.get(task_id)
         if self._require_plan and not self._graph.planned:
             raise AgentTeamError(
-                "no plan yet: call plan_tasks (or create_task + update_task) to build "
-                "the task DAG before spawning subagents"
+                "no plan yet: call plan_tasks once to build the whole task DAG "
+                "(nodes + dependencies) before spawning subagents"
             )
         if self._require_plan and not task.description.strip():
             raise AgentTeamError(

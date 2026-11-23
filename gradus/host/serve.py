@@ -278,6 +278,7 @@ class Connection:
                 self.session.tasks,
                 self.session.spawn,
                 lead_notify=self.session.notify,
+                require_plan=True,
             )
             if self.session.tasks is not None
             else None
