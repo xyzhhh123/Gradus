@@ -15,6 +15,7 @@ from unittest.mock import patch
 from mcp.types import CallToolResult, TextContent
 
 from gradus.coding import mcp
+from gradus.coding.tools.spill import SpillStore
 
 
 def _write(tmp: str, payload: object) -> Path:
@@ -440,6 +441,17 @@ class ClipResultTest(unittest.TestCase):
 
         self.assertEqual(Path(path).read_text(encoding="utf-8"), text)
         Path(path).unlink()
+
+    def test_session_store_returns_workspace_relative_artifact_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            store = SpillStore(root / ".gradus" / "spill", display_root=root)
+
+            clipped = mcp.clip_result("x" * 25_000, store)
+            relative = clipped.rsplit("[full output: ", 1)[1].rstrip("]")
+
+            self.assertTrue(relative.startswith(".gradus/spill/"))
+            self.assertTrue((root / relative).is_file())
 
 
 class TrustTest(unittest.TestCase):

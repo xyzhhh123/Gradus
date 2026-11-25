@@ -5,6 +5,8 @@
 协议是一行一个 JSON：
 
 - 脚本 -> 宿主：`{"type":"call","id":1,"name":"read_file","arguments":{...}}`
+- 脚本 -> 宿主：`{"type":"search","id":2,"query":"issues","limit":8}`
+- 脚本 -> 宿主：`{"type":"describe","id":3,"name":"mcp__github__list_issues"}`
 - 宿主 -> 脚本：`{"type":"result","id":1,"content":"...","is_error":false}`
 - 脚本结束：`{"type":"done","outputs":["..."],"returned":"..."}`
 - 脚本失败：`{"type":"error","message":"..."}`
@@ -20,6 +22,16 @@ import json
 import sys
 
 MAX_TEXT_CHARS = 200_000
+
+
+class ToolValue(str):
+    """A string-compatible nested tool result with structured fields attached."""
+
+    def __new__(cls, content, structured_content=None, details=None):
+        value = str.__new__(cls, content)
+        value.structured_content = structured_content
+        value.details = details
+        return value
 
 BLOCKED_NAMES = frozenset(
     {
@@ -99,7 +111,7 @@ def _send(payload):
 
 
 class Tools:
-    """脚本侧的 `tools.<name>(...)` 代理；每次调用走一次宿主往返。"""
+    """脚本侧的 `tools.<name>(...)` / `tools[name](...)` 代理。"""
 
     def __init__(self):
         self._next = 0
@@ -113,23 +125,43 @@ class Tools:
 
         return call
 
-    def _call(self, name, arguments):
+    def __getitem__(self, name):
+        if not isinstance(name, str) or not name or name.startswith("_"):
+            raise KeyError(name)
+
+        def call(**arguments):
+            return self._call(name, arguments)
+
+        return call
+
+    def _request(self, kind, payload):
         self._next += 1
-        _send(
-            {
-                "type": "call",
-                "id": self._next,
-                "name": name,
-                "arguments": arguments,
-            }
-        )
+        message = {"type": kind, "id": self._next}
+        message.update(payload)
+        _send(message)
         line = sys.__stdin__.readline()
         if not line:
             raise RuntimeError("host closed the bridge")
         reply = json.loads(line)
         if reply.get("is_error"):
             raise RuntimeError(reply.get("content") or "tool failed")
-        return reply.get("content", "")
+        content = reply.get("content", "")
+        if kind == "call":
+            return ToolValue(
+                content,
+                reply.get("structured_content"),
+                reply.get("details"),
+            )
+        return content
+
+    def _call(self, name, arguments):
+        return self._request("call", {"name": name, "arguments": arguments})
+
+    def search(self, query, limit):
+        return self._request("search", {"query": query, "limit": limit})
+
+    def describe(self, name):
+        return self._request("describe", {"name": name})
 
 
 def check(tree):
@@ -146,6 +178,8 @@ def check(tree):
 def format_value(value):
     if value is None:
         return None
+    if isinstance(value, ToolValue) and value.structured_content is not None:
+        value = value.structured_content
     if isinstance(value, str):
         return value
     try:
@@ -180,13 +214,27 @@ def main():
         written += len(item)
         outputs.append(item)
 
+    bridge = Tools()
+
+    def search_tools(query, limit=8):
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("search_tools query must not be empty")
+        return bridge.search(query, limit)
+
+    def describe_tool(name):
+        if not isinstance(name, str) or not name:
+            raise ValueError("describe_tool name must not be empty")
+        return bridge.describe(name)
+
     safe = {name: getattr(builtins, name) for name in ALLOWED_BUILTINS}
     safe["__build_class__"] = builtins.__build_class__
     namespace = {
         "__builtins__": safe,
         "__name__": "__codemode__",
-        "tools": Tools(),
+        "tools": bridge,
         "text": text,
+        "search_tools": search_tools,
+        "describe_tool": describe_tool,
     }
 
     buffer = io.StringIO()

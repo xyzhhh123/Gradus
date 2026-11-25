@@ -113,6 +113,13 @@ function ConversationBlock({ state, actions, renderSlot }: RootProps) {
           </div>
         ))}
 
+        {state.status !== 'running' && state.lastStopReason === 'length' && (
+          <div className="truncation">
+            <strong>输出已截断</strong>
+            <span>模型达到了输出上限，任务可能尚未完成。请继续提问或让它改为分步执行。</span>
+          </div>
+        )}
+
         {state.error && (
           <div className="error">
             <strong>{state.error.kind}</strong>

@@ -30,6 +30,16 @@ MAX_DELAY = 30.0
 RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
 _STATUS = re.compile(r"\bHTTP (\d{3})\b")
+_CONTEXT_OVERFLOW = re.compile(
+    r"(?i)(?:"
+    r"context[_ ]length[_ ]exceeded|"
+    r"maximum context|context (?:window|length).{0,40}(?:exceed|limit|too (?:long|large))|"
+    r"prompt.{0,30}(?:too long|too large|exceeds)|"
+    r"input.{0,30}(?:too long|too large|exceeds)|"
+    r"too many (?:input )?tokens|"
+    r"request (?:is )?too large"
+    r")"
+)
 
 
 @dataclass(frozen=True)
@@ -48,8 +58,24 @@ def is_retryable(error: AgentError) -> bool:
     """只有运行级 provider 失败才重试；能解析出 HTTP 状态时按可重试集合判断。"""
     if error.kind != "provider":
         return False
+    if is_context_overflow(error):
+        return False
 
     match = _STATUS.search(error.message)
     if match is None:
         return True
     return int(match.group(1)) in RETRYABLE_STATUS
+
+
+def is_context_overflow(error: AgentError) -> bool:
+    """Whether a provider failure means the request exceeded its context.
+
+    HTTP 413 is included because compatible gateways use it for oversized prompt
+    bodies. A repeated overflow still fails normally; recovery only gets one try.
+    """
+    if error.kind != "provider":
+        return False
+    if _CONTEXT_OVERFLOW.search(error.message):
+        return True
+    match = _STATUS.search(error.message)
+    return match is not None and int(match.group(1)) == 413

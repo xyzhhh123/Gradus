@@ -293,7 +293,7 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 
 | type | 说明 |
 |---|---|
-| `session/snapshot` | 连接建立或切换会话后的快照（含 `workspace`） |
+| `session/snapshot` | 连接建立或切换会话后的快照（含 `workspace` 与最后一条助手消息的 `lastStopReason`） |
 | `session/list` | 磁盘会话列表 `{ sessions, activeId }`，标题优先取头部 `title`，否则取首条提问 |
 | `session/message` | 服务端回显一条已入库的消息（用户输入），前端按 `id` 去重 |
 | `agent/event` | 一条 `AgentEvent` |
@@ -341,7 +341,7 @@ gradus-serve [--host 127.0.0.1] [--port 8765] [--workspace DIR]
 | `ToolExecutionUpdate` | `tool/update` | 按 `call.id` 追加 `partial` |
 | `ToolExecutionEnd` | `tool/end` | 卡片完成，附结果与耗时 |
 | `TurnEnd` | `turn/end` | 固化本轮 |
-| `AgentDone` | `agent/done` | 状态 idle |
+| `AgentDone` | `agent/done` | 状态 idle，保留 `stopReason`；`length` 显示“输出已截断/任务可能未完成” |
 | `AgentError` | `agent/error` | 状态 error |
 
 序列化只白名单字段，不 `asdict` 全量导出；`ToolCallBlock.id` 必须保留；`AgentError.partial` 单独标记。

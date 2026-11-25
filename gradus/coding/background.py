@@ -238,7 +238,7 @@ class BackgroundTasks:
             f"  <status>{task.status}</status>\n"
             f"  <exit_code>{exit_code}</exit_code>\n"
             f"  <command>{_one_line(task.command)}</command>\n"
-            f"  <log>{task.log_path}</log>\n"
+            f"  <inspect_with>check_background(task_id={task.id})</inspect_with>\n"
             f"  <tail>{_tail(tail, NOTICE_TAIL_LINES)}</tail>\n"
             "</task_notification>"
         )
@@ -250,7 +250,7 @@ class BackgroundTasks:
             f"status: {task.status}\n"
             f"exit_code: {exit_code}\n"
             f"command: {_one_line(task.command)}\n"
-            f"log: {task.log_path}"
+            f"task_id: {task.id}"
         )
         if task.running:
             return f"{header}\n(still running)"

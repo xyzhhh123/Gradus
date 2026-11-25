@@ -27,12 +27,13 @@ The interface belongs to the lower layer; the implementation belongs to the uppe
 It does:
 
 - build a `Request` and drive multiple model turns;
-- decide whether to continue, finish, or stop from `stop_reason`;
+- decide whether to continue, finish, or stop from `stop_reason`; a bare `length` stop injects up to two "take one concrete action" corrections and continues;
 - look up injected tools by name, check required arguments, validate against `jsonschema`, enforce `tool_timeout`, await them, and turn exceptions or timeouts into error results;
-- run a tool batch in parallel only when every tool in it declares `execution_mode="parallel"`; otherwise the whole batch runs serially; results are still written back in source order;
+- run a tool batch in parallel only when `allow_parallel_tools` is enabled and every tool in it declares `execution_mode="parallel"`; otherwise the whole batch runs serially; results are still written back in source order;
 - stop after a tool batch only when every result sets `terminate=True`; mixed batches continue normally;
 - forward tool progress through `on_update` as `ToolExecutionUpdate`, strictly between `ToolExecutionStart` and `ToolExecutionEnd`;
-- expose `details` / `structured_content` / `usage` only through `ToolExecutionEnd`; they never enter history or the run's token usage (**in testing**: rich results are deferred and the shape may change);
+- render `structured_content` once into deterministic text before writing history, so every Provider sees the same structured evidence without changing the four wire adapters;
+- keep `details` and tool-local `usage` event-only; they never enter history or the run's token usage;
 - run optional hooks before and after a run, before requests, around tools, at turn boundaries, and at the turn limit; no hooks means no behavior change;
 - drain steering before requests and after turns, and follow-up before stopping;
 - guarantee that every tool call gets a matching tool result;
@@ -51,14 +52,16 @@ It does not:
 
 ## Contracts
 
-- `ToolResult(content: str, is_error: bool = False, terminate: bool = False, details: Any = None, structured_content: Any = None, usage: Usage | None = None)`
+- `ToolResult(content: str, is_error: bool = False, terminate: bool = False, details: Any = None, structured_content: Any = None, usage: Usage | None = None)`; `structured_content` is model-visible as a capped `<structured_result>` block, while `details` and `usage` remain event-only.
+- `ToolCapability`: optional execution metadata (`effects`, result kind, workspace mutation, idempotency, retryability, contained effects). Missing metadata is treated as unknown.
 - Eight run-level events: `AgentStart`, `TurnStart`, `ToolExecutionStart`, `ToolExecutionUpdate`, `ToolExecutionEnd`, `TurnEnd`, `AgentDone`, `AgentError`
-- `AgentTool`: `spec: ToolSpec`, `execution_mode: "serial" | "parallel"`, `async def execute(call_id, arguments, on_update=None) -> ToolResult`
-- `LoopConfig`: `system`, `tools`, `max_turns`, `max_output_tokens`, `temperature`, `reasoning`, `tool_timeout`, `hooks`, `get_steering_messages`, `get_follow_up_messages`
+- `AgentTool`: `spec: ToolSpec`, `execution_mode: "serial" | "parallel"`, optional `capability: ToolCapability | None`, `async def execute(call_id, arguments, on_update=None) -> ToolResult`
+- `LoopConfig`: `system`, `tools`, `max_turns`, `max_output_tokens`, `temperature`, `reasoning`, `allow_parallel_tools`, `tool_timeout`, `hooks`, `get_steering_messages`, `get_follow_up_messages`
 - `AgentHooks`: `before_run` / `transform_messages` / `prepare_request` / `before_tool_call` / `after_tool_call` / `finish_turn` / `prepare_next_turn` / `before_finish` / `on_max_turns`, all optional
 - `AgentError.kind`: `provider` / `aborted` / `max_turns` / `config`
 - `Agent.connect(spec, config, *, api_key="", client=None, headers=None)` and `Agent.aclose()`: a pool the agent created is closed by `aclose()`; an injected pool is only borrowed. `headers` carries configured custom request headers (org / session ids a gateway asks for) straight to the provider.
 - There are exactly two terminal events: `AgentDone` and `AgentError`; `max_turns` counts model requests.
+- `AgentDone(stop_reason="length")` means the run stopped with incomplete output; callers must not present it as a normal success.
 
 See [docs/design.md](docs/design.md) for fields, ordering, and terminal semantics.
 

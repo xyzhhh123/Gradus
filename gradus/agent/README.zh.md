@@ -27,12 +27,13 @@ ai/       Provider、内部协议
 负责：
 
 - 组装 `Request`，驱动多轮模型请求；
-- 根据 `stop_reason` 决定继续、结束或终止；
+- 根据 `stop_reason` 决定继续、结束或终止；输出撞上 `length` 且没有工具调用时，最多注入两次“小步行动”修正并续跑；
 - 按名字调用注入的工具，检查必填参数、用 `jsonschema` 校验参数、按 `tool_timeout` 限时，`await` 执行结果，把异常与超时转成错误结果；
-- 只有批次内每个工具都声明 `execution_mode="parallel"` 时才并发执行，否则整批串行；结果仍按源顺序写回；
+- 只有 `allow_parallel_tools` 打开且批次内每个工具都声明 `execution_mode="parallel"` 时才并发执行，否则整批串行；结果仍按源顺序写回；
 - 只有整批工具结果都 `terminate=True` 时才跳过下一次模型请求；混合批次照常继续；
 - 工具的 `on_update` 进度会转成 `ToolExecutionUpdate`，只出现在 `ToolExecutionStart` 与 `ToolExecutionEnd` 之间；
-- `details` / `structured_content` / `usage` 只通过 `ToolExecutionEnd` 暴露，不进入历史，也不计入运行用量（**测试中**：富工具结果暂缓，接口可能调整）；
+- `structured_content` 在写入历史前确定性渲染成文本，因此四家 Provider 无需同时修改协议也能看到同一份结构化证据；
+- `details` 与工具自身的 `usage` 只进入事件，不进入历史，也不计入运行用量；
 - 在运行前后、请求前、工具前后、轮次收尾与上限判断调用可选 hooks；不传时行为不变；
 - 在请求前、轮次后排空 steering，在停止前排空 follow-up；
 - 保证每个工具调用都有对应的工具结果；
@@ -51,14 +52,16 @@ ai/       Provider、内部协议
 
 ## 对外契约
 
-- `ToolResult(content: str, is_error: bool = False, terminate: bool = False, details: Any = None, structured_content: Any = None, usage: Usage | None = None)`
+- `ToolResult(content: str, is_error: bool = False, terminate: bool = False, details: Any = None, structured_content: Any = None, usage: Usage | None = None)`；`structured_content` 会以有上限的 `<structured_result>` 块进入模型历史，`details` 与 `usage` 仍只进事件。
+- `ToolCapability`：可选执行语义（effects、结果类型、是否修改 workspace、幂等、可重试、副作用是否被内层工具再次门禁）。缺少时按未知处理。
 - 8 个运行级事件：`AgentStart`、`TurnStart`、`ToolExecutionStart`、`ToolExecutionUpdate`、`ToolExecutionEnd`、`TurnEnd`、`AgentDone`、`AgentError`
-- `AgentTool`：`spec: ToolSpec`，`execution_mode: "serial" | "parallel"`，`async def execute(call_id, arguments, on_update=None) -> ToolResult`
-- `LoopConfig`：`system`、`tools`、`max_turns`、`max_output_tokens`、`temperature`、`reasoning`、`tool_timeout`、`hooks`、`get_steering_messages`、`get_follow_up_messages`
+- `AgentTool`：`spec: ToolSpec`，`execution_mode: "serial" | "parallel"`，可选 `capability: ToolCapability | None`，`async def execute(call_id, arguments, on_update=None) -> ToolResult`
+- `LoopConfig`：`system`、`tools`、`max_turns`、`max_output_tokens`、`temperature`、`reasoning`、`allow_parallel_tools`、`tool_timeout`、`hooks`、`get_steering_messages`、`get_follow_up_messages`
 - `AgentHooks`：`before_run` / `transform_messages` / `prepare_request` / `before_tool_call` / `after_tool_call` / `finish_turn` / `prepare_next_turn` / `before_finish` / `on_max_turns`，全部可选
 - `AgentError.kind`：`provider` / `aborted` / `max_turns` / `config`
 - `Agent.connect(spec, config, *, api_key="", client=None, headers=None)` 与 `Agent.aclose()`：自建的连接池由 `aclose()` 关闭，注入的只借用不关闭；`headers` 是配置里的自定义请求头（网关要求 org id / 会话 id 之类），原样转给 Provider。
 - 终止事件只有 `AgentDone` 和 `AgentError` 两个；`max_turns` 按模型请求次数计。
+- `AgentDone(stop_reason="length")` 表示运行已经停下但输出不完整；上层不得把它展示成正常成功。
 
 字段、事件顺序与终止语义见 [docs/design.md](docs/design.md)。
 

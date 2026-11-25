@@ -12,10 +12,12 @@ from gradus.ai.types import AssistantMessage, ToolCallBlock
 from gradus.coding.permissions import (
     MAX_RESULT_CHARS,
     Policy,
+    detect_shell_source_writes,
     make_after_tool_call,
     make_before_tool_call,
     sanitize_result,
 )
+from gradus.coding.tools.codemode import create_codemode_tool
 
 
 class PolicyTest(unittest.TestCase):
@@ -44,8 +46,17 @@ class PolicyTest(unittest.TestCase):
                 "write_file", {"path": str(Path(other) / "a.py")}
             )
 
-        self.assertEqual(decision.action, "ask")
-        self.assertIn("workspace", decision.reason)
+        self.assertEqual(decision.action, "deny")
+        self.assertIn("must be relative", decision.reason)
+
+    def test_parent_traversal_is_denied(self):
+        decision = self.policy.decide(
+            "write_file",
+            {"path": "../outside.py"},
+        )
+
+        self.assertEqual(decision.action, "deny")
+        self.assertIn("must not contain", decision.reason)
 
     def test_protected_paths_are_denied(self):
         for path in (".env", "config/.env.local", "key.pem", ".git/config"):
@@ -64,6 +75,34 @@ class PolicyTest(unittest.TestCase):
     def test_other_commands_ask(self):
         self.assertEqual(self.policy.decide("bash", {"command": "ls -la"}).action, "ask")
 
+    def test_shell_source_write_names_the_risk_before_execution(self):
+        decision = self.policy.decide(
+            "bash",
+            {"command": "sed -i 's/a/b/' src/app.py"},
+        )
+
+        self.assertEqual(decision.action, "ask")
+        self.assertIn("修改源码", decision.reason)
+        self.assertIn("src/app.py", decision.reason)
+
+    def test_shell_detection_covers_redirect_tee_and_patch(self):
+        self.assertEqual(
+            detect_shell_source_writes("printf x > src/a.ts"),
+            ("src/a.ts",),
+        )
+        self.assertEqual(
+            detect_shell_source_writes("printf x | tee src/a.py"),
+            ("src/a.py",),
+        )
+        self.assertEqual(
+            detect_shell_source_writes("git apply fix.diff"),
+            ("<patch>",),
+        )
+
+    def test_shell_detection_ignores_dev_null_and_non_source(self):
+        self.assertEqual(detect_shell_source_writes("echo x >/dev/null"), ())
+        self.assertEqual(detect_shell_source_writes("echo x > result.txt"), ())
+
     def test_powershell_commands_ask_and_are_denied(self):
         self.assertEqual(
             self.policy.decide("powershell", {"command": "Get-ChildItem"}).action, "ask"
@@ -74,6 +113,18 @@ class PolicyTest(unittest.TestCase):
 
     def test_unknown_tool_asks(self):
         self.assertEqual(self.policy.decide("mcp_weather", {}).action, "ask")
+
+    def test_unisolated_codemode_requires_outer_confirmation(self):
+        codemode = create_codemode_tool(
+            [],
+            self.policy,
+            None,
+        )
+        policy = self.policy.with_tools([codemode])
+
+        decision = policy.decide("codemode", {"code": "text('x')"})
+
+        self.assertEqual(decision.action, "ask")
 
 
 class HookTest(unittest.IsolatedAsyncioTestCase):
@@ -176,6 +227,25 @@ class SanitizeTest(unittest.IsolatedAsyncioTestCase):
         result = await hook(self._context(ToolResult("sk-abcdefghijklmnop1234")))
 
         self.assertEqual(result.content, "sk-***")
+
+    async def test_after_hook_nudges_shell_source_writes(self):
+        hook = make_after_tool_call()
+        context = AfterToolCallContext(
+            call=ToolCallBlock(
+                id="c1",
+                name="bash",
+                arguments={"command": "sed -i 's/a/b/' src/app.py"},
+            ),
+            arguments={"command": "sed -i 's/a/b/' src/app.py"},
+            assistant=AssistantMessage(),
+            result=ToolResult("ok"),
+            turn=0,
+        )
+
+        result = await hook(context)
+
+        self.assertIn("[tool guidance]", result.content)
+        self.assertIn("use edit", result.content)
 
     def _context(self, result: ToolResult) -> AfterToolCallContext:
         return AfterToolCallContext(

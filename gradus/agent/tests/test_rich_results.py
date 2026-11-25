@@ -14,7 +14,13 @@ from gradus.agent.tests.fakes import (
     text_script,
     tool_script,
 )
-from gradus.agent.types import AgentDone, ToolExecutionEnd, TurnEnd
+from gradus.agent.types import (
+    AgentDone,
+    ToolExecutionEnd,
+    ToolResult,
+    TurnEnd,
+    model_visible_tool_content,
+)
 from gradus.ai.types import Usage, UserMessage
 
 
@@ -53,7 +59,12 @@ class RichResultsTest(unittest.IsolatedAsyncioTestCase):
         turn_end = next(e for e in events if isinstance(e, TurnEnd))
         self.assertEqual(
             [result.content for result in turn_end.tool_results],
-            ["edited a.py"],
+            [
+                "edited a.py\n\n"
+                "<structured_result>\n"
+                '{"status":"ok"}\n'
+                "</structured_result>"
+            ],
         )
 
         # 工具自身的 usage 不进入整次运行的 token 汇总。
@@ -100,6 +111,27 @@ class RichResultsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             end.result.usage,
             Usage(input_tokens=10, output_tokens=2),
+        )
+
+    def test_structured_content_is_rendered_deterministically(self):
+        result = ToolResult(
+            "",
+            structured_content={"z": 1, "a": [2, 3]},
+        )
+
+        self.assertEqual(
+            model_visible_tool_content(result),
+            '<structured_result>\n{"a":[2,3],"z":1}\n</structured_result>',
+        )
+
+    def test_structured_content_is_not_duplicated(self):
+        text = '{"status":"ok"}'
+
+        self.assertEqual(
+            model_visible_tool_content(
+                ToolResult(text, structured_content={"status": "ok"})
+            ),
+            text,
         )
 
 

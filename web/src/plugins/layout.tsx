@@ -551,8 +551,16 @@ function Shell(props: RootProps) {
 
           <div className="chat-head-right">
             {renderSlot('shell.head-actions', props)}
-            <span className={`pill pill-${state.status}`}>
-              {STATUS_TEXT[state.status] ?? state.status}
+            <span
+              className={`pill ${
+                state.status === 'idle' && state.lastStopReason === 'length'
+                  ? 'pill-truncated'
+                  : `pill-${state.status}`
+              }`}
+            >
+              {state.status === 'idle' && state.lastStopReason === 'length'
+                ? '输出已截断'
+                : STATUS_TEXT[state.status] ?? state.status}
             </span>
           </div>
         </header>

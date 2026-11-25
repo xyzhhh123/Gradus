@@ -85,7 +85,14 @@ class Skill:
     def body(self) -> str:
         """读正文并去掉 frontmatter。"""
         text = self.path.read_text(encoding="utf-8")
-        return _split_frontmatter(text)[1].strip()
+        body = _split_frontmatter(text)[1].strip()
+        # Imported Claude/Codex skills use this placeholder for bundled assets.
+        # Gradus has no plugin-root environment variable, so expand it only after
+        # the skill has been explicitly loaded.
+        root = self.path.parent.resolve().as_posix()
+        return body.replace("${CLAUDE_PLUGIN_ROOT}", root).replace(
+            "${CLAUDE_SKILL_DIR}", root
+        )
 
     def read(self, offset: int = 0) -> tuple[str, int]:
         """读正文的一段，返回 `(片段, 总长度)`；`offset` 用于续读。"""

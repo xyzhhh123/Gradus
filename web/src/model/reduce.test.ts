@@ -67,7 +67,12 @@ describe('reduce', () => {
       frame('agent/event', { type: 'agent/start' }),
       frame('agent/event', { type: 'turn/start', turn: 0 }),
       frame('agent/event', { type: 'assistant/delta', text: 'hello' }),
-      frame('agent/event', { type: 'agent/done', usage: { inputTokens: 1, outputTokens: 2 }, turns: 1 }),
+      frame('agent/event', {
+        type: 'agent/done',
+        usage: { inputTokens: 1, outputTokens: 2 },
+        turns: 1,
+        stopReason: 'stop',
+      }),
     ]
     const once = events.reduce(reduce, initialState())
     const twice = events.reduce(reduce, initialState())
@@ -98,6 +103,19 @@ describe('reduce', () => {
     expect(state.status).toBe('idle')
     expect(state.error).toBeNull()
     expect(state.turns[0].tools[0].status).toBe('cancelled')
+  })
+
+  it('保留截断的终止原因，供界面显示未完成状态', () => {
+    let state = applyEvent(initialState(), { type: 'agent/start' })
+    state = applyEvent(state, {
+      type: 'agent/done',
+      usage: { inputTokens: 10, outputTokens: 8192 },
+      turns: 1,
+      stopReason: 'length',
+    })
+
+    expect(state.status).toBe('idle')
+    expect(state.lastStopReason).toBe('length')
   })
 
   it('新消息到达前，上一轮助手文本先并入历史', () => {

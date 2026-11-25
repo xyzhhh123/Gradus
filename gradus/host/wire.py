@@ -89,6 +89,7 @@ def encode_event(event: Any) -> dict[str, Any] | None:
             "type": "agent/done",
             "usage": usage_payload(event.usage),
             "turns": event.turns,
+            "stopReason": event.stop_reason,
         }
     if isinstance(event, AgentError):
         return {"type": "agent/error", "kind": event.kind, "message": event.message}
@@ -180,6 +181,14 @@ def snapshot_payload(
 
     `capabilities` 由宿主按当前环境裁剪：服务不了的能力不报，前端就不显示入口。
     """
+    last_stop_reason = next(
+        (
+            message.stop_reason
+            for message in reversed(session.messages)
+            if isinstance(message, AssistantMessage)
+        ),
+        None,
+    )
     return {
         "protocolVersion": PROTOCOL_VERSION,
         "capabilities": list(capabilities),
@@ -188,6 +197,7 @@ def snapshot_payload(
         "tools": [tool.spec.name for tool in session.tools],
         "workspace": str(session.workspace),
         "model": model_summary(session.settings),
+        "lastStopReason": last_stop_reason,
         "sandbox": {
             "backend": session.sandbox_backend,
             "warning": session.sandbox_warning,

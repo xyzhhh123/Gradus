@@ -79,7 +79,12 @@ class ExtensionTest(unittest.TestCase):
         )
 
     def _load(self, *, enabled: bool = True) -> extensions.Extensions:
-        return extensions.load(self.root, enabled=enabled, project_dir=self.folder)
+        return extensions.load(
+            self.root,
+            enabled=enabled,
+            project_dir=self.folder,
+            user_dir=self.root / "missing-user-extensions",
+        )
 
     def test_missing_directory_is_empty(self):
         loaded = self._load()
@@ -182,6 +187,22 @@ class ExtensionTest(unittest.TestCase):
         self._skill("lint", "check style", "run the linter")
 
         self.assertEqual(self._load().skill("lint").body(), "run the linter")
+
+    def test_skill_body_expands_bundled_asset_root(self):
+        self._skill(
+            "planner",
+            "plan with files",
+            "read ${CLAUDE_PLUGIN_ROOT}/templates/task_plan.md",
+        )
+
+        skill = self._load().skill("planner")
+        body = skill.body()
+
+        self.assertIn(
+            f"{skill.path.parent.resolve().as_posix()}/templates/task_plan.md",
+            body,
+        )
+        self.assertNotIn("${CLAUDE_PLUGIN_ROOT}", body)
 
     def test_skills_section_lists_name_and_description_without_path(self):
         self._skill("lint", "check style", "run the linter")
@@ -294,8 +315,15 @@ class SessionExtensionTest(unittest.IsolatedAsyncioTestCase):
         self.workspace = self.root / "workspace"
         self.folder = self.workspace / ".gradus" / "extensions"
         self.folder.mkdir(parents=True)
+        self.user_dir_patch = patch.object(
+            extensions,
+            "default_user_dir",
+            return_value=self.root / "missing-user-extensions",
+        )
+        self.user_dir_patch.start()
 
     async def asyncTearDown(self) -> None:
+        self.user_dir_patch.stop()
         await session.close_pool()
         self._tmp.cleanup()
 

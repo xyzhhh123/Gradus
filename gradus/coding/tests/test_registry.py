@@ -58,6 +58,10 @@ class ToolCatalogTest(unittest.TestCase):
         self.assertEqual([tool.spec.name for tool in catalog.direct], ["a"])
         self.assertEqual([tool.spec.name for tool in catalog.deferred], ["b"])
         self.assertEqual([tool.spec.name for tool in catalog.hidden], ["c"])
+        self.assertEqual(
+            [tool.spec.name for tool in catalog.callable_tools],
+            ["a", "b"],
+        )
         self.assertEqual(len(catalog), 3)
 
     def test_add_all_keeps_order(self):

@@ -137,7 +137,8 @@ AssistantEvent = StreamStart | TextStart | ... | StreamDone | StreamError
 | 类型 | 字段 | 说明 |
 | --- | --- | --- |
 | `ToolSpec` | `name`、`description`、`parameters: dict` | JSON Schema。 |
-| `ModelSpec` | `provider`、`model`、`base_url`、`context_window`、`max_output_tokens` | 靠这张表，一套 `openai_compat` 覆盖多个品牌。不含凭证：`api_key` 由上层读好，构造 Provider 时传入。 |
+| `ModelCapabilities` | `native_cache`、`parallel_tools`、`image_input`、`image_output`、`server_tools`、`structured_output`、`reasoning_replay` | 面向运行时策略的能力声明。`parallel_tools` 已由 Agent Loop 使用；其余标志供后续 Provider-aware 请求策略使用，不把具体模型名泄漏到上层。 |
+| `ModelSpec` | `provider`、`model`、`base_url`、`context_window`、`max_output_tokens`、`capabilities` | 靠这张表，一套 `openai_compat` 覆盖多个品牌。不含凭证：`api_key` 由上层读好，构造 Provider 时传入。 |
 | `Request` | `system`、`messages`、`tools`、`max_output_tokens`、`temperature`、`reasoning` | `system` 是系统提示词的唯一入口，落到哪里由适配器决定（messages[0] / `system` / `instructions`）；模型名只从 `ModelSpec` 取。`reasoning` 只有上层显式指定档位时才非 `None`，不支持的厂商因此永远看不到这个字段。 |
 | `Provider` | `spec`、`stream(request) -> AsyncIterator[AssistantEvent]` | 协议，没有实现。所有实现都以 `(spec, api_key, client=None)` 构造；`client` 传入长活的 `httpx.AsyncClient` 即可复用连接池，由调用方负责关闭，不传则每次自建并关闭。`Protocol` 表达不了构造函数，这条靠约定与测试保证。同一实例可并发调用：真实适配器的 `stream()` 不写实例状态。 |
 | `ReasoningLevel` / `THINKING_BUDGETS` | 四档 -> 1024 / 2048 / 8192 / 16384 | 只有把强度表达成 token 预算的厂商查这张表，其余厂商直接发档位名。 |

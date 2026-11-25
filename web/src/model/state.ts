@@ -7,6 +7,7 @@ import type {
   SandboxInfo,
   SessionInfo,
   SessionStatus,
+  StopReasonWire,
   UsageTotalsWire,
   UsageWire,
 } from '../protocol/frames'
@@ -60,6 +61,8 @@ export interface SessionState {
   activeModelId: string | null
   pendingConfirm: PendingConfirm | null
   error: { kind: string; message: string } | null
+  /** 最后一轮模型调用的终止原因；`length` 表示输出被截断。 */
+  lastStopReason: StopReasonWire | null
 }
 
 export function initialState(): SessionState {
@@ -82,5 +85,6 @@ export function initialState(): SessionState {
     activeModelId: null,
     pendingConfirm: null,
     error: null,
+    lastStopReason: null,
   }
 }

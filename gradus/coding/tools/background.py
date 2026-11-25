@@ -23,7 +23,7 @@ CHECK_BACKGROUND_SPEC = ToolSpec(
     name="check_background",
     description=(
         "Check background commands started in this session. Omit task_id to list "
-        "tasks with their status. Pass task_id to get status, exit code, log path, "
+        "tasks with their status. Pass task_id to get status, exit code, "
         "and the tail of its output. Completed tasks are also reported "
         "automatically as a task notification."
     ),

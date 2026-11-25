@@ -374,7 +374,13 @@ async def cleanup_orphans(
 
 
 #: 我们在临时目录里写下的东西；只按这些前缀回收，别的一概不碰。
-TEMP_PREFIXES = ("gradus-mcp-", "gradus-tmp-", "gradus-ac-", "gradus-rs-")
+TEMP_PREFIXES = (
+    "gradus-mcp-",
+    "gradus-tmp-",
+    "gradus-ac-",
+    "gradus-rs-",
+    "gradus-spill-",
+)
 
 #: scratch 目录里的 owner 标记：记录创建它的 pid，强杀后下次启动可直接回收。
 SCRATCH_MARKER = ".owner"

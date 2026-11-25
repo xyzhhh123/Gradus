@@ -42,10 +42,15 @@ def render(event: AgentEvent) -> str | None:
         return f"\n[tool] {event.call.name} {status}{duration}{preview}"
 
     if isinstance(event, AgentDone):
-        return (
+        line = (
             f"\n[done] {event.turns} turns, "
             f"in {event.usage.input_tokens} / out {event.usage.output_tokens} tokens"
         )
+        # `length` 意味着这一轮输出撞上了上限：响应可能被截断，任务并没有真的做完。
+        # 不打出来的话，截断和「正常收工」在终端上完全一样。
+        if event.stop_reason == "length":
+            line += " (truncated: response hit the output-token limit)"
+        return line
 
     if isinstance(event, AgentError):
         return f"\n[error] {event.kind}: {event.message}"

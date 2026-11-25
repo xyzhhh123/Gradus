@@ -20,13 +20,15 @@ from pathlib import Path
 from typing import Any
 
 from ...agent.base import AgentTool, ToolUpdateCallback
-from ...agent.types import ToolResult
+from ...agent.types import ToolCapability, ToolResult
 from ...ai.base import ToolSpec
+from ..paths import WorkspacePathError, workspace_path
 
 GREP_LIMIT = 100
 GLOB_LIMIT = 1000
 MAX_BYTES = 50 * 1024
 MAX_LINE = 300
+READ_CAPABILITY = ToolCapability(effects=("search",), result_kind="evidence")
 
 IGNORED_DIRS = frozenset(
     {
@@ -132,6 +134,7 @@ class GrepTool:
 
     spec = GREP_SPEC
     execution_mode = "parallel"
+    capability = READ_CAPABILITY
 
     def __init__(self, root: Path) -> None:
         self._root = root
@@ -153,7 +156,10 @@ class GrepTool:
         except re.error as exc:
             return ToolResult(f"Invalid regex: {exc}", is_error=True)
 
-        target = _resolve(str(arguments.get("path") or ""), self._root)
+        try:
+            target = _resolve(str(arguments.get("path") or ""), self._root)
+        except WorkspacePathError as exc:
+            return ToolResult(str(exc), is_error=True)
         if not target.exists():
             return ToolResult(f"Path not found: {target}", is_error=True)
 
@@ -171,6 +177,7 @@ class GlobTool:
 
     spec = GLOB_SPEC
     execution_mode = "parallel"
+    capability = READ_CAPABILITY
 
     def __init__(self, root: Path) -> None:
         self._root = root
@@ -185,7 +192,10 @@ class GlobTool:
         if not pattern:
             return ToolResult("pattern is required", is_error=True)
 
-        base = _resolve(str(arguments.get("path") or ""), self._root)
+        try:
+            base = _resolve(str(arguments.get("path") or ""), self._root)
+        except WorkspacePathError as exc:
+            return ToolResult(str(exc), is_error=True)
         if not base.exists():
             return ToolResult(f"Path not found: {base}", is_error=True)
         if not base.is_dir():
@@ -338,7 +348,4 @@ def _label(path: Path, root: Path) -> str:
 
 
 def _resolve(path: str, root: Path) -> Path:
-    candidate = Path(path).expanduser()
-    if not candidate.is_absolute():
-        candidate = root / candidate
-    return candidate.resolve()
+    return workspace_path(root, path, allow_root=True)

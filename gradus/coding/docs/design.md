@@ -53,9 +53,12 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 | 文件 | 职责 |
 | --- | --- |
 | `config.py` | 从 JSON 配置文件、环境变量与 CLI overrides 读 key、`base_url`、模型名，产出 `Settings`（`ModelSpec` + key）；不做网络 |
-| `session.py` | 建池、建 Provider、建 `Agent`；装配 `LoopConfig.system`（含项目规则文件）与 `AgentHooks`；会话文件的创建、恢复与链式落盘；超预算时触发压缩并重建 `Agent`；持有后台任务表与定时任务表，把两者的结果转成消息或一轮对话 |
+| `session.py` | 建池、建 Provider、建 `Agent`；装配 `LoopConfig.system`（含项目规则文件）与 `AgentHooks`；会话文件的创建、恢复与链式落盘；超预算时触发压缩；处理 context-overflow 一次性恢复；持有后台任务表、定时任务表与完成门禁 |
+| `changes.py` | 工作区修改账本：把文件工具、patch、Shell 推断出的变更写成 `change` 会话记录 |
+| `completion.py` | 工作区修改后的通用证据复查门禁：修改后没有成功验证命令时，停止会被转成一次复盘轮 |
 | `context.py` | token 估算（CJK 加权、真实 usage 做锚点）、压缩切点、旧消息摘要；不读写会话文件 |
-| `retry.py` | 运行级重试策略：同模型重试、退避、判断哪些 `AgentError` 值得重跑；不换模型 |
+| `paths.py` | 模型路径契约：只接受 workspace-relative POSIX，解析到副本内 canonical absolute path，并拒绝盘符/UNC/`..`/symlink realpath 越界 |
+| `retry.py` | 运行级重试策略：同模型重试、退避、context-overflow 分类；不换模型 |
 | `background.py` | 后台命令：任务表、独立 asyncio task、日志落盘、并发与存活上限；完成时回调 `Session`，不直接碰对话 |
 | `schedule.py` | 定时任务：五段式 cron 解析与匹配、任务状态流转（待交付 / 重试上限）、`schedules.json` 原子读写；不启动运行，"到点谁来跑"由上层决定 |
 | `tasks.py` | 任务图：节点与 `blocked_by` 依赖、认领与解锁、环检测、`tasks.json` 原子读写；不启动运行，"谁去跑节点"由上层决定 |
@@ -71,16 +74,17 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 | `extensions.py` | 扫 `<workspace>/.gradus/extensions`，动态加载工具、斜杠命令与技能；单个文件失败只告警 |
 | `tools/mcp_resources.py` | `list_mcp_resources` / `list_mcp_resource_templates` / `read_mcp_resource`；跨 server 汇总、分页、二进制落临时文件 |
 | `render.py` | 把 `AgentEvent` 渲染成终端文本；不定义 hook、不做权限判断 |
-| `permissions.py` | 按工具名 + 路径 / 命令前缀判断放行、拒绝还是询问；工具结果截断与脱敏 |
-| `tools/files.py` | `read_file` / `list_dir` / `write_file` / `edit` |
+| `permissions.py` | 优先读取 ToolCapability，再按路径 / 命令前缀判断放行、拒绝还是询问；执行前识别 Shell 源码写入；工具结果截断与脱敏 |
+| `tools/files.py` | `read_file` / `write_file` / `edit` / `apply_patch` / `delete_file` |
 | `tools/search.py` | `grep`（内容）/ `glob`（路径）；跳过常见忽略目录，扫描在线程里跑 |
 | `tools/shell.py` | `bash` / `powershell`；只在解释器存在时注册，命令在 workspace 内执行；`run_in_background` 转交 `background.py` |
 | `tools/background.py` | `check_background`：只读后台任务表，列任务或读单个任务的输出尾部；从不启动或取消任务 |
 | `tools/schedule.py` | `schedule_task` / `manage_schedules`：增删查定时任务；只动任务表，不执行任务 |
 | `tools/tasks.py` | `create_task` / `update_task` / `list_tasks` / `get_task` / `claim_task` / `complete_task`：只动任务图，派活由 `AgentTeam` 负责 |
-| `tools/tool_search.py` | `tool_search`：在任意来源的 `deferred` 工具里按名字 / 描述检索，登记给 `prepare_next_turn`；不执行选中的工具 |
-| `tools/codemode.py` | `codemode`：起子进程跑模型写的 Python，通过 JSON 桥调用已声明工具；脚本级一次确认 |
-| `tools/codemode_harness.py` | 子进程执行器：受限 builtins、AST 过滤、`tools.*` 代理；不 import gradus |
+| `tools/spill.py` | 超长输出落到 workspace 内 `.gradus/spill/`；指针使用相对路径，引用计数与过期回收 |
+| `tools/tool_search.py` | `tool_search`：在 `deferred` 工具里检索，登记给 `prepare_next_turn`；会话内成功/失败反馈参与后续排序 |
+| `tools/codemode.py` | `codemode`：起子进程跑模型写的 Python，通过 JSON 桥调用 direct + deferred 工具；显式报告执行边界；嵌套结构化结果保留 |
+| `tools/codemode_harness.py` | 子进程执行器：受限 builtins、AST 过滤、`tools.*` / `tools[name]` 代理与工具检索全局；不 import gradus |
 | `cli.py` | 参数解析、交互循环、把用户输入接到 `session` |
 
 ## 5. 工具契约
@@ -91,19 +95,20 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 - `execution_mode`：只读工具可声明 `parallel`，写操作与命令保持 `serial`；
 - 工具自身超时用内部 `asyncio.timeout`，`LoopConfig.tool_timeout` 只作兜底；
 - `async execute(call_id, arguments, on_update=None) -> ToolResult`；
-- 长输出通过 `on_update` 上报进度；`details` 等富字段只给 UI，不进入模型上下文。
+- 长输出通过 `on_update` 上报进度；`structured_content` 经 agent 层确定性文本化进入模型历史，`details` / 工具自身 usage 只给 UI 与日志；
+- 可选 `capability` 把只读、写、执行、委派、幂等和 workspace 修改等语义交给权限与运行时策略。
 
 工具集通过 `LoopConfig.tools` 注入，新增工具不改契约。
 
-路径：相对路径基于会话 cwd 解析；工具内不做沙箱，绝对路径与 `..` 允许，越界拦截归 M3 的 `before_tool_call`（对齐 Pi）。`read_file` 上限 2000 行或 50KB，`list_dir` 上限 500 项，输出都不带行号。
+路径：模型协议只接受 workspace-relative POSIX 路径。`coding.paths.WorkspacePath` 拒绝绝对路径、盘符、UNC、空组件与 `..`，再把相对路径解析到会话副本 root，并对最终 realpath 做 containment 检查；symlink/junction 指向 workspace 外同样拒绝。Shell 仍是任意进程边界，由执行环境决定隔离强度。`read_file` 上限 2000 行或 50KB，输出不带行号；目录列举使用 `glob(pattern="*", mode="dirs")`。
 
-写：`write_file` 新建或覆盖，自动创建父目录；`edit` 用 `edits[]` 做精确替换，每个 `old_text` 必须在原文中唯一且互不重叠，未读过文件时拒绝（`FileTracker` 记录 `read_file` / `write_file` 成功过的路径）。
+写：`write_file` 新建或有意整文件覆盖；`edit` 用 `edits[]` 做精确替换，每个 `old_text` 必须在原文中唯一且互不重叠，不要求先调用 `read_file`；`apply_patch` 支持多文件 Add / Update / Delete，每个 hunk 必须精确匹配一次，提交前先完成全量校验，失败不会留下部分文件。
 
 搜索：`grep` 支持 `pattern` / `path` / `glob` / `ignoreCase` / `literal` / `context` / `limit`（默认 100 条），输出 `path:line: text`，单行截断到 300 字符；`glob` 支持 `pattern` / `path` / `limit`（默认 1000 条），输出相对路径。两者都跳过 `.git`、`node_modules`、虚拟环境等目录，不读 `.gitignore`，扫描走 `asyncio.to_thread`。
 
 命令：`bash` 与 `powershell` 分开注册，模型按环境选；只注册 PATH 里真实存在的解释器，`powershell` 仅 Windows。`cwd` 固定为 workspace，stdout / stderr 合并，CRLF 统一成 LF；非零退出码标记 `is_error` 并附上退出码；默认超时 120s（上限 600s），输出上限 30000 字符。
 
-命令没有沙箱：`cwd` 只是起点，`cd ..` 或绝对路径可以离开；危险命令黑名单是字符串前缀匹配，可被绕过；实际闸门是交互确认（无确认回调时命令一律拒绝）。需要真正隔离时用容器或虚拟机运行 Gradus；内置隔离是延缓项，见 [coding_plan.md](../coding_plan.md) 的 M14。
+命令的实际边界由 `Environment` 决定：`local` 只是工作目录，不是安全沙箱；`docker` / `restricted` / `appcontainer` 提供不同强度的隔离。危险命令黑名单仍是字符串前缀匹配，实际闸门是交互确认（无确认回调时命令一律拒绝）。
 
 结果治理：`after_tool_call` 把所有工具结果截断到 50k 字符，并把 `sk-...`、`Bearer ...`、`api_key=...` 替换为 `***`；未发生变化时返回 `None`，不复制结果。
 
@@ -147,8 +152,8 @@ CLI 启动时先把 `<workspace>/.env` 里的键填入环境变量（`KEY=VALUE`
 - `toolExposure` 是 `工具名 -> exposure` 的覆盖表：先按精确名匹配，再按配置顺序取第一个命中的通配符（`fnmatch`），最后回落到 server 的 `exposure`；
 - `description` 是给模型看的 server 说明，只用于系统提示里的 deferred 列表；
 - 存在 deferred 工具时，`Session.connect` 在系统提示末尾追加一段「有工具可用但未声明」的通用说明，并列出 MCP server 的名字 + 描述（将来其它来源的 deferred 工具复用同一段说明）；
-- 暴露策略由 `registry.ToolCatalog` 统一持有：内置工具与直接声明的 MCP 工具按 `direct` 入册，MCP 的 `deferred` 工具按 `deferred` 入册，`hidden` 不经过目录；工具来源不限于 MCP，将来扩展工具或脚本工具可以按同一套方式入册；
-- `tool_search(query, limit=8)`：在 `catalog.deferred` 里按「名字命中 +3、描述命中 +1」排序，返回命中的工具说明，并把它们登记为待加载；本身只读、`parallel`、不受权限询问；
+- 暴露策略由 `registry.ToolCatalog` 统一持有：内置工具与直接声明的 MCP 工具按 `direct` 入册，MCP 的 `deferred` 工具按 `deferred` 入册，`hidden` 不经过目录；`callable_tools` 暴露 direct + deferred 给 codemode，但永远不含 hidden；工具来源不限于 MCP；
+- `tool_search(query, limit=8)`：在 `catalog.deferred` 里用共享 BM25（名字、描述、参数 schema）排序，叠加当前会话里工具成功/失败次数形成的轻量反馈分数，返回命中的工具说明并登记为待加载；本身只读、`parallel`；
 - 加载通过 `prepare_next_turn` 生效：只把新工具追加进下一轮 `LoopConfig.tools`，不写会话文件、不改历史消息；加载结果只在本次运行内有效，下一次 `prompt` 从原始工具集重新开始；
 - 已声明的工具不会重复追加；`tool_search` 只在 `catalog.deferred` 非空时注册。
 
@@ -175,15 +180,18 @@ OAuth 登录（M12 续）：
 
 ### 5.2 codemode
 
-`codemode(code, timeout?)` 让模型写一段 Python，在独立子进程里跑，通过桥调用已声明的工具。
+`codemode(code, timeout?)` 让模型写一段 Python，在独立子进程里跑，通过桥调用工具。
 
-- 脚本可见的工具是 `catalog.direct` 里的内置工具、直接声明的 MCP 工具与资源工具；不含 `codemode` 自己与 `tool_search`，deferred 工具也不暴露给脚本；
-- 调用形状 `tools.<name>(**kwargs)`，返回工具内容字符串；工具返回 `is_error` 时脚本里抛 `RuntimeError`，脚本可以自己捕获；
+- 脚本可见的工具是 `catalog.callable_tools`：direct + deferred，不包含 hidden；`codemode` 自己与 `tool_search` 仍从脚本池排除；
+- 调用形状兼容 `tools.<name>(**kwargs)`；运行时发现的工具用 `tools[name](**kwargs)`；
+- 脚本内 `search_tools(query, limit=8)` 复用 `tool_search` 的 BM25 排序，返回 `name` / `description`；`describe_tool(name)` 返回描述与参数字段；两者都由宿主生成，不写死 MCP 名称；
+- 这个路径允许在**一次模型工具调用**里发现并执行 deferred 工具；`tool_search` 保留给“需要把匹配工具声明出来并反复直接调用”的场景；
+- 工具调用返回兼容字符串的 `ToolValue`，其 `.structured_content` / `.details` 保留嵌套工具的结构化字段；工具返回 `is_error` 时脚本里抛 `RuntimeError`，脚本可以自己捕获；
 - 只有 `text(...)` 与 `return` 的值进模型上下文，`print` 的输出丢弃；结果上限 30000 字符；
-- 权限：`codemode` 本身按只读放行；脚本内每次调用都走 `Policy.decide`，`ask` 类（写、命令、未知工具）在同一次脚本里只确认一次，`deny` 直接拒绝；没有确认回调时按拒绝处理；
+- 权限：`local` Codemode 明确标记为非隔离，外层调用需要确认；`docker` / `restricted` / `appcontainer` 才声明为 contained。脚本内每次调用仍走 `Policy.decide`，`ask` 类在同一次脚本里只确认一次，`deny` 直接拒绝；
 - 隔离：子进程用 `python -I`，只注入白名单 builtins，AST 拒绝 `import`、危险内建名（`eval` / `exec` / `open` 等）与下划线开头的属性访问；
 - 超时默认 120 秒、上限 600 秒；超时或父进程退出时子进程被 kill；临时脚本文件在结束后删除；
-- **这不是沙箱**：进程仍是同一 OS 用户，绕过桥直接读写文件是可能的；真隔离（进程树、网络、文件系统、资源限制）归 M14。
+- **边界按后端报告**：`local` 仍是同一 OS 用户，只做 API 隔离；结果里带 `execution_boundary` 与 `isolated`，不再把本地子进程描述成安全沙箱。
 
 ### 5.3 扩展与技能
 
@@ -208,6 +216,8 @@ OAuth 登录（M12 续）：
 - 每层按 `AGENTS.override.md` / `AGENTS.md` / `AGENTS.MD` / `CLAUDE.md` / `CLAUDE.MD` 取第一个存在的；
 - 一路走到文件系统根，按「根 -> workspace」拼进系统提示，近的（workspace）排在后面，覆盖远的约定；
 - 渲染成 `<project_context>`，每个文件一段 `<project_instructions path="...">`；
+- 项目规则是**低优先级仓库指导**：不能覆盖 system / user 指令、安全边界或权限策略；要求泄露密钥、关闭防护或忽略用户任务的内容不执行；
+- 文件正文中的 `</project_context>` / `</project_instructions>` 会被转义，路径属性按 HTML 属性转义，避免破坏外层结构；
 - 不需要信任：只是文本，不产生额外能力；不做大小限制，内容计入上下文预算；
 - `Session.connect(system=...)` 显式给系统提示时不拼规则文件（调用方全权接管）；
 - `Session.connect` 读一次，`/reload` 与 MCP 工具刷新会重读；不监听文件变化；
@@ -459,8 +469,12 @@ one.workspace_sync       # 合回结果：applied / deleted / error / kept
 8,000 字符，超出时提示用 `offset` 续读；未知名字报错并列出可用技能。索引里**不带路径**——
 路径留给工具，带路径只会诱导模型绕过工具去 `read_file`。
 
+导入 Claude / Codex 的 Skill 时，正文里的 `${CLAUDE_PLUGIN_ROOT}` /
+`${CLAUDE_SKILL_DIR}` 会在 `use_skill` 实际读取时展开成该 Skill 的安装目录。这样
+`templates/`、`scripts/`、`references/` 等随包资源可直接定位，同时索引仍不泄漏宿主路径。
+
 用户入口保留：`/skill:name 参数` 把正文展开进用户消息（支持 `$ARGUMENTS`）。两条入口都记一次使用：
-`Session.skills_used`，只在内存，暂不落盘（会话文件目前有五种记录，加第六种要改格式版本）。
+`Session.skills_used`，只在内存，暂不落盘。
 
 **frontmatter**：`name`（可选，缺省目录名，`^[a-z0-9-]+$`，≤64 字符）、`description`
 （必填，≤1024 字符，缺失或超长→警告并跳过）、`disable-model-invocation`（可选，默认 false）。
@@ -481,21 +495,27 @@ one.workspace_sync       # 合回结果：applied / deleted / error / kept
 
 ### 5.9 工具使用准则与写入排队
 
-**准则放系统提示，不放 description。** 每个工具的 `description` 只讲「是什么、参数怎么填、有什么上限」；
-「什么时候该用它」集中写在 `BASE_PROMPT` 的 `Tool use:` 段里，一行一条：
+**通用准则放 `BASE_PROMPT`，条件能力按实际注册工具生成。** 每个工具的 `description` 只讲
+「是什么、参数怎么填、有什么上限」；稳定的行为准则集中写在 `Tool use:` 段里。只有当前会话
+真的注册了 `codemode` / `recall_history` / `spawn_agent` / `tool_search` 时，才在
+`Current tool guidance:` 中加入对应说明，避免提示模型调用不存在的工具。
 
 | 准则 | 解决什么 |
 | --- | --- |
 | 先 grep/glob 定位，再用 offset/limit 读区间 | 整读大文件把上下文一次撑爆 |
-| `write_file` 覆盖整文件，小改用 `edit`；改前先读 | 用写覆盖掉没读过的内容 |
+| `write_file` 覆盖整文件，小改用 `edit`；优先读取后再改 | 用写覆盖掉没读过的内容，同时不因 Bash 读取阻塞精确编辑 |
 | shell 输出用 head/tail/grep 过滤，不用来看文件 | 命令输出成为上下文里最大的一块 |
-| 多步工具调用写成 `codemode` 脚本 | 来回调用比一段脚本贵 |
-| `recall_history` 取回被压缩掉的原文 | 压缩之后「想不起为什么这么改」 |
+| 有 `codemode` 时，多步工具调用写成一段脚本 | 来回调用比一段脚本贵 |
+| 有 `recall_history` 时，用它取回被压缩掉的原文 | 压缩之后「想不起为什么这么改」 |
 | 只读可并行，写与相互依赖的串行 | 并行批次里互相覆盖 |
 | 改完要跑测试/命令验证 | 只改不验，把问题留给用户 |
 
 理由与 Pi 一致：`description` 是给参数校验器和「这工具能干什么」用的，行为策略集中一处才好维护
 （Pi 用 `promptSnippet` + `promptGuidelines` 合进系统提示，形态不同，分工相同）。
+
+**环境段报告实际能力。** `Environment` 除 cwd / OS 外还报告 sandbox 后端、网络边界和
+workspace 模式（直写或 sandbox copy）。项目规则里的绝对 `path` 只作来源标记，工具路径仍以
+`cwd` 为准。`Session.connect(system=...)` 显式接管时，不追加项目规则、技能清单或条件工具说明。
 
 **同一路径的写操作排队。** 读写都走 `asyncio.to_thread`，「读-改-写」之间存在真实让出点：
 并行批次里两个调用改同一个文件时，后写的会覆盖前一个的结果。`PathLocks` 按解析后的绝对路径
@@ -594,7 +614,7 @@ e4）；**同一个模型给自己当裁判**，质量取决于模型这一轮�
 
 已定：`before_tool_call` 是 async hook，需要确认时直接 `await` 一个注入的确认回调即可，不阻塞事件循环。
 
-默认策略：只读工具（`read_file` / `list_dir` / `grep` / `glob` / `tool_search` / `check_background` / `manage_schedules` / `create_task` / `update_task` / `list_tasks` / `get_task` / `claim_task` / `complete_task` / `list_mcp_resources` / `list_mcp_resource_templates` / `read_mcp_resource` / `codemode`）放行；写工具（`write_file` / `edit` / `delete_file`）与命令（`bash` / `powershell`）询问；`schedule_task` 落在「未知工具」分支按询问处理——新建定时任务会在无人值守时跑一整轮，值得先确认。敏感路径（`.env*`、`*.pem`、`id_rsa*`、`.git/*`）和危险命令（`rm -rf`、`sudo`、`git push --force`）直接拒绝；写越界走询问。白名单先按工具名，参数级规则覆盖路径与命令前缀。`codemode` 只放行脚本运行器本身，脚本内的写与命令由 `CodemodeTool` 按同一策略逐次判断、整段脚本只确认一次。扩展工具默认落在「未知工具」分支，按询问处理。
+默认策略：优先读取工具自己的 `ToolCapability`。文件写工具与执行工具询问；只读工具放行；未声明能力的工具回落到原有工具名白名单。路径规则会从 `path` / `paths` / `apply_patch` 文件头中提取并统一检查敏感路径与越界。Shell 命令在执行前检测 `sed -i`、`perl -pi`、重定向、`tee`、`git apply` 与 inline Python 等源码修改形态，并把具体风险写入确认原因。`local` Codemode 不再按只读放行，而是要求外层确认；脚本内写与命令仍由同一策略逐次判断、整段脚本只确认一次。扩展工具默认落在未知能力路径，按询问处理。
 
 ## 7. 会话与历史
 
@@ -604,6 +624,7 @@ e4）；**同一个模型给自己当裁判**，质量取决于模型这一轮�
 - 之后每行 `{"type":"message","id":"e1","parentId":null,"message":...}`；当前只写线性链，叶子是最后一条；
 - 恢复时从叶子沿 `parentId` 回溯到根；文件里若已有分叉，以最后一行为叶子；
 - 压缩时追加 `{"type":"compaction","id","parentId","summary","firstKeptEntryId"}`；原消息不删。**压缩不替换历史**：`SessionFile` 只记一条状态（摘要 + `firstKeptEntryId`），模型看到的视图由 `context.project_view` 派生；运行中与恢复后走同一个函数。
+- 工作区修改追加 `{"type":"change",...}`；context-overflow 恢复追加 `{"type":"overflow",...}`。两者都参与线性 parent 链，但不是消息、不进入模型投影。
 
 `Session.prompt` 在 `AgentDone` 时把 `new_messages` 追加到文件。恢复时校验 entry `id` 唯一、`parentId` 无缺失、压缩引用的 entry 存在，并要求 `ToolCallBlock` 与 `ToolResultMessage` 一一对应；不满足直接拒绝启动。
 
@@ -619,7 +640,9 @@ e4）；**同一个模型给自己当裁判**，质量取决于模型这一轮�
 - 输出上限反过来：`max_output_tokens` 会原样进请求，模型支持 384k 不代表每次都要 384k，
   所以缺省仍是保守值，能力单独记在 `spec.output_limit`；
 - 估算：宽字符（CJK / 假名 / 谚文）按 1 字 1 token，其余按 3.5 字符 1 token；**锚点绑在「请求」上**——记下每次真实请求的输入 token 与该请求包含的消息条数，之后只估算新增部分，压缩或裁剪后锚点清空，等下一次请求重新锚定；
-- 触发：`tokens > context_window - 预留`；预留为 `max(16384, max_output_tokens)`，按当前模型算；启动与换模型时都校验「保留量 < 触发线」，不满足直接拒绝；
+- 工作窗口：`spec.context_window` 是默认工作预算，`spec.window_limit` 才是模型能力上限；已知模型的 1M/更大能力不会被直接当成每轮工作窗口。可用 `context_window` / `GRADUS_CONTEXT_WINDOW` 覆盖工作窗口；
+- 触发：以 `context_window - max(16384, max_output_tokens)` 为可用输入，乘以内部默认比例 `0.75`，再夹在 `32k` 下限和 `160k` 上限之间；这些是内部策略常量，不要求用户理解或配置 `ratio/headroom`。启动与换模型时都校验「保留量 < 触发线」，不满足直接拒绝；
+- 请求前裁剪：投影后超过触发线时，先对旧 tool result 做 head/tail 裁剪，再执行原有硬裁；原文仍在 session 日志中，可通过 recall/恢复查看。裁剪写入 `prune` 事件，不把裁剪后的内容写回 canonical history；
 - 保留量按**触发线的比例**给：`clamp(ratio × 触发线, 下限, 上限)`，再被「触发线的一半」压一次。三个预设（`keep_preset` / `GRADUS_KEEP_PRESET`）：`conservative` (0.10/8k/24k)、`balanced` (0.25/12k/64k，默认)、`aggressive` (0.40/16k/120k)。固定值在小窗口下会大于触发线（压完原地打转），在大窗口下又只留 2%——窗口是买来的容量，按比例缩放才对得上；上限防止大窗口把单次请求的输入成本顶上去。显式 `context_keep_tokens` 仍然优先；
 - 切点：从末尾往前累加，取最早一个仍在保留量内的 `user` 消息；只切在 user 处，工具调用与结果不会被拆开；**当前这一轮不切**（`select_cut` 拿不到合法切点时返回空），所以压缩总是从第二轮起才可能发生；
 - 摘要：**重放主前缀**——把可见历史原样塞进请求，末尾追加一条「压缩成交接摘要」的用户消息；工具定义与系统提示也照发，这样这次调用是上一次真实请求的真前缀，provider 的提示缓存可以复用。摘要请求里出现工具调用即判失败；装不下时退回「拍成文本、另起请求」的兜底路径。失败只放弃本次压缩，不打断当前轮次；
@@ -637,9 +660,14 @@ e4）；**同一个模型给自己当裁判**，质量取决于模型这一轮�
 
 - 位置：`session._run` 捕获 `AgentError` 后用 `agent.continue_()` 重跑，不重复追加用户消息；
 - 次数：额外重试 2 次，退避 0.5s 起、逐次翻倍、单次上限 30s；
-- 范围：只重试 `provider`；`aborted` / `max_turns` / `config` 不重试；消息里能解析出 HTTP 状态时，只重试 `RETRYABLE_STATUS` 中的状态（400 / 401 / 403 / 404 / 413 / 422 等不重试）；
+- 范围：只重试 `provider`；`aborted` / `max_turns` / `config` 不重试；消息里能解析出 HTTP 状态时，只重试 `RETRYABLE_STATUS` 中的状态；
+- context overflow：常见 context-length / prompt-too-long 文案与 HTTP 413 单独分类，不进入普通重试；`Session` 强制压缩、激进投影裁剪并重排 trim，确认估算变小后只重试一次。再次 overflow 或无法缩小则原样失败，并写 `overflow` 记录；
 - 换模型：不做自动降级链，也不按任务自动选模型；模型由启动配置决定，要换就重建 `Agent`；
 - 落盘：`AgentError.new_messages` 是失败前已完成的轮次，与 `AgentDone` 一样追加到会话文件，避免文件落后于内存历史。
+
+### 7.2 完成门禁
+
+`CompletionGate` 观察成功的文件修改与验证命令。修改后的最新版本如果没有成功运行测试、构建、lint 或检查命令，模型第一次正常停止会被 `finish_turn` 转成 `continue`，`prepare_next_turn` 注入一次通用复盘要求：按用户需求列验证证据、运行最相关检查、明确剩余缺口。同一个修改版本最多提示一次，避免无限循环；成功验证后不再打扰。
 
 ## 8. 观测
 

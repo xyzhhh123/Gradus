@@ -653,6 +653,11 @@ button:disabled {
   border-color: color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
+.pill-truncated {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
 .chat-body {
   display: flex;
   flex-direction: column;
@@ -799,6 +804,22 @@ button:disabled {
 }
 
 .error strong {
+  flex: none;
+  font-weight: 600;
+}
+
+.truncation {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  font-size: var(--fs-13);
+  color: var(--warn);
+}
+
+.truncation strong {
   flex: none;
   font-weight: 600;
 }

@@ -89,6 +89,20 @@ class WireTest(unittest.TestCase):
             "type": "agent/done",
             "usage": {"inputTokens": 10, "outputTokens": 4},
             "turns": 1,
+            "stopReason": "stop",
+        }
+
+        truncated = AgentDone(
+            new_messages=[],
+            usage=usage,
+            turns=2,
+            stop_reason="length",
+        )
+        assert encode_event(truncated) == {
+            "type": "agent/done",
+            "usage": {"inputTokens": 10, "outputTokens": 4},
+            "turns": 2,
+            "stopReason": "length",
         }
 
     def test_error_keeps_kind_and_message(self) -> None:
@@ -123,7 +137,10 @@ class WireTest(unittest.TestCase):
     def test_snapshot_shape(self) -> None:
         spec = SimpleNamespace(provider="openai_compat", model="kimi")
         session = SimpleNamespace(
-            messages=(UserMessage("hi"),),
+            messages=(
+                UserMessage("hi"),
+                AssistantMessage(content=[], stop_reason="length"),
+            ),
             tools=(SimpleNamespace(spec=SimpleNamespace(name="bash")),),
             sandbox_backend="restricted",
             sandbox_warning="network NOT isolated",
@@ -142,6 +159,7 @@ class WireTest(unittest.TestCase):
             "provider": "openai_compat",
             "model": "kimi",
         }
+        assert payload["lastStopReason"] == "length"
         assert payload["sandbox"] == {
             "backend": "restricted",
             "warning": "network NOT isolated",

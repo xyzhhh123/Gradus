@@ -2,6 +2,9 @@
 
 跑公开榜的 SWE-bench 子集，**按题独立、可切片、可续跑**。
 
+> Terminal-Bench 是另一套入口（Harbor 框架 + `harbor_agent.py`），见
+> [`terminal-bench.md`](terminal-bench.md)，与本文件的 SWE-bench 流程互不影响。
+
 ## 为什么是切片
 
 评测天然是「按题」的：一题一个仓库副本、一条结果记录。所以可以「跑几道停一下，下次接着跑」，
@@ -63,6 +66,7 @@ bench/
   common.py          # 任务/结果/记账/Wilson/汇总格式
   run.py             # 切片运行器（--workers 并发）
   agent.py           # 宿主直跑执行器（调试用，无边界）
+  path_contract_ab.py # workspace-relative 路径契约 A/B canary
   container.py       # 容器执行器：实例镜像 + 挡答案域名 + 自检参数
   container_task.py  # 容器内驱动：跑 Gradus → patch → 自检 → 失败再修
   grade.py           # 官方判定：gold 基线对照 + 实时日志 + 自动清容器
@@ -71,6 +75,11 @@ bench/
   report.py          # 汇总
   results.py         # 多轮判定汇总 + ENV 折抵（未判定 / 失败分类）
   cleanup.py         # 清 harness 容器与实例镜像
+  harbor_agent.py    # Harbor / Terminal-Bench agent adapter
+  build_bundle.sh    # 构建 Terminal-Bench 便携 bundle
+  run_tb_suite.ps1   # Terminal-Bench 套件启动脚本
+  terminal-bench.md  # Terminal-Bench 使用说明
+  terminal-bench-pitfalls.md # Terminal-Bench 踩坑记录
   Dockerfile                    # 空盒子（python:3.13 + gradus）
   Dockerfile.agent-instance     # 实例镜像盒子（+ uv py3.13 + conda testbed）
   tasks.jsonl        # 题单（一行一题）

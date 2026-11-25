@@ -10,10 +10,11 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from ...agent.base import AgentTool, ToolUpdateCallback
-from ...agent.types import ToolResult
+from ...agent.types import ToolCapability, ToolResult
 from ...ai.base import ToolSpec
 
 TOOL_NAME = "use_skill"
+SKILL_CAPABILITY = ToolCapability(effects=("read",), result_kind="evidence")
 
 
 def use_skill_spec(limit: int) -> ToolSpec:
@@ -48,6 +49,7 @@ class UseSkillTool:
     """按名字取技能正文；每次调用都记一次使用。"""
 
     execution_mode = "serial"
+    capability = SKILL_CAPABILITY
 
     def __init__(
         self,

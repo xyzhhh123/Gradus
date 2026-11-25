@@ -48,6 +48,16 @@ DEFAULT_RESERVE_TOKENS = 16_384
 #: 压缩后保留的近期原文上限（旧口径：固定值）。保留给退化窗口与显式覆盖用。
 DEFAULT_KEEP_RECENT_TOKENS = 20_000
 
+#: Internal operating policy. These are policy constants, not user settings:
+#: a proportional trigger bounded by a safe floor and ceiling.
+DEFAULT_COMPACT_RATIO = 0.75
+MIN_COMPACT_TRIGGER_TOKENS = 32_768
+MAX_COMPACT_TRIGGER_TOKENS = 160_000
+DEFAULT_TOOL_RESULT_PRUNE_CHARS = 8_192
+DEFAULT_TOOL_RESULT_PRUNE_HEAD_CHARS = 4_096
+DEFAULT_TOOL_RESULT_PRUNE_TAIL_CHARS = 1_024
+TOOL_RESULT_PRUNE_MARKER = "\n\n[... tool result middle pruned ...]\n\n"
+
 #: 保留量的三个预设：`(占触发线的比例, 下限, 上限)`。
 #:
 #: 为什么按比例：固定 20,000 在 20 万窗口上占 11%、在 1M 窗口上只占 2%——窗口越大，
@@ -258,8 +268,19 @@ def compact_threshold(
     context_window: int,
     reserve_tokens: int = DEFAULT_RESERVE_TOKENS,
 ) -> int:
-    """触发压缩的输入 token 数。"""
-    return max(context_window - reserve_tokens, 0)
+    """触发压缩的输入 token 数。
+
+    Use a proportional trigger with internal bounds. The caller does not need
+    to tune a ratio or headroom: small windows get a safe floor, large windows
+    are capped so a 1M-capable model does not accumulate a 1M working prompt.
+    """
+    usable = max(context_window - reserve_tokens, 0)
+    if usable <= 0:
+        return 0
+    candidate = int(usable * DEFAULT_COMPACT_RATIO)
+    lower = min(MIN_COMPACT_TRIGGER_TOKENS, usable)
+    upper = min(MAX_COMPACT_TRIGGER_TOKENS, usable)
+    return min(max(candidate, lower), upper)
 
 
 def retention_budget(
@@ -318,7 +339,7 @@ class ContextBudget:
     @property
     def threshold(self) -> int:
         """触发压缩的输入 token 数。"""
-        return max(self.window - self.reserve, 0)
+        return compact_threshold(self.window, self.reserve)
 
     @classmethod
     def for_model(
@@ -343,7 +364,7 @@ class ContextBudget:
                 f"context window must be positive, got {context_window}"
             )
         reserve = budget_reserve(max_output_tokens, reserve_tokens)
-        threshold = max(context_window - reserve, 0)
+        threshold = compact_threshold(context_window, reserve)
         if threshold <= 0:
             return cls(
                 context_window,
@@ -382,6 +403,65 @@ class TrimResult:
     kept: list[Message]
     dropped: int
     dropped_tokens: int
+
+
+@dataclass(frozen=True)
+class ToolResultPrune:
+    """A request-view tool-result reduction; the original history is untouched."""
+
+    messages: list[Message]
+    count: int
+    chars_removed: int
+
+
+def prune_tool_results(
+    messages: Sequence[Message],
+    *,
+    before: int | None = None,
+    keep_recent: int = 8,
+    threshold_chars: int = DEFAULT_TOOL_RESULT_PRUNE_CHARS,
+    head_chars: int = DEFAULT_TOOL_RESULT_PRUNE_HEAD_CHARS,
+    tail_chars: int = DEFAULT_TOOL_RESULT_PRUNE_TAIL_CHARS,
+) -> ToolResultPrune:
+    """Trim old tool-result middles for one model-visible view.
+
+    This is intentionally a projection operation, not a session rewrite. The
+    full result remains available in the session and can be recovered later.
+    """
+    if threshold_chars < 1:
+        raise ValueError("threshold_chars must be positive")
+    if head_chars < 0 or tail_chars < 0 or head_chars + tail_chars >= threshold_chars:
+        raise ValueError("tool-result prune budgets must fit below threshold")
+    if keep_recent < 0:
+        raise ValueError("keep_recent must be non-negative")
+    end = (
+        max(0, len(messages) - keep_recent)
+        if before is None
+        else max(0, min(before, len(messages)))
+    )
+    changed: list[Message] = []
+    count = 0
+    chars_removed = 0
+    for index, message in enumerate(messages):
+        if (
+            index < end
+            and isinstance(message, ToolResultMessage)
+            and len(message.content) > threshold_chars
+        ):
+            tail = message.content[-tail_chars:] if tail_chars else ""
+            content = message.content[:head_chars] + TOOL_RESULT_PRUNE_MARKER + tail
+            chars_removed += len(message.content) - len(content)
+            count += 1
+            changed.append(
+                ToolResultMessage(
+                    tool_call_id=message.tool_call_id,
+                    content=content,
+                    is_error=message.is_error,
+                )
+            )
+        else:
+            changed.append(message)
+    return ToolResultPrune(changed, count, chars_removed)
 
 
 @dataclass(frozen=True)

@@ -113,6 +113,7 @@ AgentError("provider", message, partial, new_messages, usage)
 class AgentTool(Protocol):
     spec: ToolSpec
     execution_mode: Literal["serial", "parallel"]
+    capability: ToolCapability | None
 
     async def execute(
         self,
@@ -124,6 +125,7 @@ class AgentTool(Protocol):
 
 - 工具实例由上层构造，通过 `LoopConfig.tools` 注入；`agent` 只按 `spec.name` 查找。
 - `execution_mode` 由工具作者声明，`agent` 不分析参数、不做运行时推断；不提供时按 `serial` 处理。
+- `capability` 是可选的执行语义，描述副作用、结果类型、是否修改 workspace、幂等性与可重试性；缺少时按未知处理，具体产品层可以使用自己的兼容回退。
 - `on_update` 是执行期间的进度回调，调用后转成 `ToolExecutionUpdate`；`execute` 返回后的调用会被丢弃。
 - `execute` 是异步的；同步工具由上层用 `asyncio.to_thread` 包装。
 - 工具只拿 `call_id` 和已解析的 `arguments`，不接触 `Agent`、`Session` 或完整历史。
@@ -140,7 +142,7 @@ class AgentTool(Protocol):
 ### 4.3 顺序、超时与完整性
 
 - 同一批工具调用默认按 assistant 消息里的原始顺序**串行**执行。
-- 只有批次内**每个**调用对应的工具都声明 `execution_mode="parallel"` 时才并发执行；只要有一个工具是 `serial`、未声明或查不到，整批退回串行（规则 A）。
+- 只有 `LoopConfig.allow_parallel_tools=True` 且批次内**每个**调用对应的工具都声明 `execution_mode="parallel"` 时才并发执行；只要有一个工具是 `serial`、未声明或查不到，整批退回串行（规则 A）。
 - 并发时 `ToolExecutionStart` 按源顺序发出，`ToolExecutionEnd` 按完成顺序发出；`ToolResultMessage` 仍按源顺序写回。
 - 每个被执行的 `ToolCallBlock` 都必须生成一条 `ToolResultMessage`，失败、未知工具、参数缺失、超时也不例外；否则下一轮请求可能被厂商拒绝。
 - `LoopConfig.tool_timeout` 不为 `None` 时，用 `asyncio.timeout` 包住 `execute()`；超时生成 `is_error=True` 的结果，运行继续。
@@ -150,7 +152,7 @@ class AgentTool(Protocol):
 ```python
 ToolResultMessage(
     tool_call_id=call.id,
-    content=result.content,
+    content=model_visible_tool_content(result),
     is_error=result.is_error,
 )
 ```
@@ -203,13 +205,13 @@ ToolResultMessage(
 | --- | --- | --- | --- |
 | `content` / `is_error` | 模型下一轮能看到的文本结果 | 是 | 否 |
 | `details` | UI / 日志用的结构化附加信息 | 否 | 否 |
-| `structured_content` | 机器可读的 JSON 结果 | 否 | 否 |
+| `structured_content` | 机器可读的 JSON 结果 | 是，经确定性文本渲染并受长度上限约束 | 否 |
 | `usage` | 工具自身消耗，例如子代理的 token | 否 | 否 |
 
-- 只有 `content` / `is_error` 会写成 `ToolResultMessage`；模型看不到 `details`，因此不会占用上下文 token。
-- `details` / `structured_content` / `usage` 只通过 `ToolExecutionEnd.result` 暴露给上层。
+- `content` / `is_error` 与渲染后的 `structured_content` 会写成 `ToolResultMessage`；这样四家 Provider 不必同时扩展富结果协议。
+- `details` / `usage` 只通过 `ToolExecutionEnd.result` 暴露给上层，模型看不到。
 - `after_tool_call` 改写 `content` / `is_error` / `terminate` 时，其余字段原样保留。
-- 多模态内容或让结构化结果进入后续模型请求，需要先扩展 `ai/types.py` 的 `ToolResultMessage`，不属于 agent 单独实现。
+- 原生图片或多模态块仍需扩展 `ai/types.py` 与各适配器；当前结构化结果先走兼容文本桥。
 
 ### 4.5 实现细节
 
@@ -269,7 +271,7 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 | --- | --- | --- | --- |
 | `tool_use` | 执行本批工具，写回结果，进入下一轮 | 是 | 继续 |
 | `stop` | 正常结束 | 否 | `AgentDone(stop_reason="stop")` |
-| `length` 且无工具调用 | 正常结束（参数可能被截断） | 否 | `AgentDone(stop_reason="length")` |
+| `length` 且无工具调用 | 注入 harness 修正消息并续跑，最多 2 次；用尽后结束 | 否 | 续跑，或 `AgentDone(stop_reason="length")` |
 | `length` 且有工具调用 | 不执行；为每个调用写错误结果，进入下一轮 | 否 | 继续 |
 | `deferred` | 追加该消息后立即再请求，计入 `max_turns` | 否 | 继续 |
 | `filtered` | 不重试，向用户说明 | 否 | `AgentDone(stop_reason="filtered")` |
@@ -277,11 +279,12 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 | `tool_use` 但没有调用 | 协议异常，结束 | 否 | `AgentError(kind="provider")` |
 | `stop` 但带工具调用 | 结束，不执行 | 否 | `AgentDone(stop_reason="stop")` |
 
-四条容易写错的规则：
+五条容易写错的规则：
 
 - **只认 `tool_use`**。`stop` 即使带了工具调用也不执行，避免把协议异常当成正常请求。
 - **`tool_use` 必须有调用**。没有调用是协议异常，发 `AgentError(kind="provider")`，不能当正常结束。
 - **`length` 不执行，但要补错误结果**。输出被截断时工具参数可能只写了一半；有调用时为每个调用写 `is_error=True` 的结果并续跑，让模型重新发起。
+- **无工具调用的 `length` 不是正常完成**。没有 `tool_call_id` 时不能伪造工具结果；循环注入一条 `UserMessage(origin="harness")`，明确告诉模型上一轮被截断、什么都没执行，并要求下一次只做一个具体动作。最多补救 `MAX_BARE_TRUNCATION_RETRIES=2` 次；提示在真正发下一次请求前进入 transcript 和 `new_messages`，补救请求照常计入 `max_turns`。
 - **`deferred` 不执行工具**。即使消息里带了工具调用，也先原样续跑，不消耗这一批调用。
 
 `max_turns` 耗尽时：
@@ -393,7 +396,7 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 | --- | --- |
 | `types.py` | 事件与 `ToolResult` 的形状 |
 | `hooks.py` | 9 个控制钩子的 Context / Result / `AgentHooks` |
-| `base.py` | `AgentTool` 协议（含 `execution_mode`）与 `LoopConfig`（含 `hooks`、`tool_timeout`、两个 getter） |
+| `base.py` | `AgentTool` 协议（含 `execution_mode`、可选 `capability`）与 `LoopConfig`（含并行开关、`hooks`、`tool_timeout`、两个 getter） |
 | `validation.py` | 基于 `jsonschema` 的完整参数校验与错误格式化 |
 | `loop.py` / `run_loop` | 轮次、终止判断、事件转发、hook 调用 |
 | `agent.py` / `Agent` | 有状态门面：历史、状态、`steer` / `follow_up` / `notify`、`abort` / `wait_for_idle` / `reset`、`connect` / `aclose`（连接池寿命） |
@@ -408,9 +411,9 @@ on_max_turns：轮次到达上限、尚未发 AgentError(max_turns) 时。
 
 已完成：
 
-- `types.py`：`ToolResult`（含 `terminate` / `details` / `structured_content` / `usage`）+ 8 个运行级事件 + `AgentEvent`。
+- `types.py`：`ToolResult`、`ToolCapability`、结构化结果文本渲染 + 8 个运行级事件 + `AgentEvent`。
 - `hooks.py`：`before_run`、`transform_messages`、`prepare_request`、`before_tool_call`、`after_tool_call`、`finish_turn`、`prepare_next_turn`、`before_finish`、`on_max_turns`。
-- `base.py`：`AgentTool` 协议（含 `execution_mode`）+ `LoopConfig`（含 `hooks: AgentHooks`、`tool_timeout`）。
+- `base.py`：`AgentTool` 协议（含 `execution_mode`、可选 `capability`）+ `LoopConfig`（含 `allow_parallel_tools`、`hooks: AgentHooks`、`tool_timeout`）。
 - `validation.py`：`jsonschema`（Draft 2020-12）参数校验，错误消息按字段路径排序。
 - `loop.py`：单层异步循环，包含 `stop_reason` 分支、串行 / 并行工具批次、超时、usage 汇总、provider 异常边界、`tool_use` 零调用协议检查、整轮原子提交与 9 个 hook 接线。
 - `agent.py`：`Agent` 门面，内部 task 驱动 `run_loop`，事件经队列转发；维护跨运行历史与 `idle` / `running` 状态；`steer` / `follow_up` 的队列按运行创建并在运行结束时丢弃；`connect()` 建 Provider 与连接池，`aclose()` 关闭自建 client（注入的不关）。

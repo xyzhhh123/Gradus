@@ -16,11 +16,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ...agent.base import AgentTool, ToolUpdateCallback
-from ...agent.types import ToolResult
+from ...agent.types import ToolCapability, ToolResult
 from ...ai.base import ToolSpec
 from ..retrieval import bm25, tokenize
 
@@ -28,6 +28,7 @@ DEFAULT_LIMIT = 8
 
 #: 零命中时最多列多少个工具。MCP 池子可能上百个，全列会把上下文撑爆。
 MAX_INDEX = 30
+SEARCH_CAPABILITY = ToolCapability(effects=("search",), result_kind="diagnostic")
 
 TOOL_SEARCH_SPEC = ToolSpec(
     name="tool_search",
@@ -80,7 +81,8 @@ def _schema_text(schema: Any, parts: list[str]) -> None:
                 _schema_text(variant, parts)
 
 
-def _document(spec: ToolSpec) -> str:
+def tool_search_document(spec: ToolSpec) -> str:
+    """Searchable text for one tool."""
     parts = [spec.name, spec.name.replace("_", " "), spec.description]
     _schema_text(spec.parameters, parts)
     return " ".join(part for part in parts if part and part.strip())
@@ -92,15 +94,20 @@ def _first_line(description: str, limit: int = 110) -> str:
     return line[:limit] + "…" if len(line) > limit else line
 
 
-def _rank(pool: Sequence[AgentTool], query: str) -> list[AgentTool]:
+def rank_tools(
+    pool: Sequence[AgentTool],
+    query: str,
+    feedback: Mapping[str, float] | None = None,
+) -> list[AgentTool]:
+    """Rank tools by BM25 relevance; callers apply their own result limit."""
     query_terms = tokenize(query)
     if not query_terms:
         return []
 
-    corpus = [tokenize(_document(tool.spec)) for tool in pool]
+    corpus = [tokenize(tool_search_document(tool.spec)) for tool in pool]
     scores = bm25(query_terms, corpus)
     ranked = [
-        (score, index, tool)
+        (score + (feedback or {}).get(tool.spec.name, 0.0), index, tool)
         for index, (score, tool) in enumerate(zip(scores, pool))
         if score > 0
     ]
@@ -127,11 +134,13 @@ class ToolSearchTool:
 
     spec = TOOL_SEARCH_SPEC
     execution_mode = "parallel"
+    capability = SEARCH_CAPABILITY
 
     def __init__(self, pool: Sequence[AgentTool]) -> None:
         self._pool = list(pool)
         self._pending: list[AgentTool] = []
         self._pending_names: set[str] = set()
+        self._stats: dict[str, dict[str, int]] = {}
 
     async def execute(
         self,
@@ -165,7 +174,7 @@ class ToolSearchTool:
 
         # 名字加载优先：它不经过分词，任何语言都能用。
         if query:
-            for tool in _rank(self._pool, query):
+            for tool in rank_tools(self._pool, query, self.feedback):
                 if tool not in matches:
                     matches.append(tool)
         matches = matches[:limit]
@@ -176,6 +185,11 @@ class ToolSearchTool:
                 if name not in self._pending_names:
                     self._pending.append(tool)
                     self._pending_names.add(name)
+                stats = self._stats.setdefault(
+                    name,
+                    {"searches": 0, "calls": 0, "successes": 0, "errors": 0},
+                )
+                stats["searches"] += 1
 
         lines = [f"{tool.spec.name}: {tool.spec.description}" for tool in matches]
         if matches:
@@ -194,3 +208,25 @@ class ToolSearchTool:
         pending, self._pending = self._pending, []
         self._pending_names.clear()
         return pending
+
+    @property
+    def feedback(self) -> dict[str, float]:
+        """In-session ranking bonus derived from real tool outcomes."""
+        result: dict[str, float] = {}
+        for name, stats in self._stats.items():
+            calls = stats["calls"]
+            if not calls:
+                continue
+            success_rate = stats["successes"] / calls
+            result[name] = success_rate * 2.0 + min(calls, 5) * 0.05
+        return result
+
+    def note_outcome(self, tool_name: str, is_error: bool) -> None:
+        if tool_name == self.spec.name:
+            return
+        stats = self._stats.setdefault(
+            tool_name,
+            {"searches": 0, "calls": 0, "successes": 0, "errors": 0},
+        )
+        stats["calls"] += 1
+        stats["successes" if not is_error else "errors"] += 1

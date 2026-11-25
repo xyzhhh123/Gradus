@@ -68,6 +68,19 @@ class ToolSpec:
 
 
 @dataclass(frozen=True)
+class ModelCapabilities:
+    """Protocol/model capabilities that affect runtime policy."""
+
+    native_cache: bool = False
+    parallel_tools: bool = True
+    image_input: bool = False
+    image_output: bool = False
+    server_tools: bool = False
+    structured_output: bool = False
+    reasoning_replay: bool = False
+
+
+@dataclass(frozen=True)
 class ModelSpec:
     """一个模型的接入参数，不含任何凭证。
 
@@ -86,6 +99,7 @@ class ModelSpec:
     max_output_tokens: int
     window_limit: int | None = None
     output_limit: int | None = None
+    capabilities: ModelCapabilities = field(default_factory=ModelCapabilities)
 
 
 @dataclass(frozen=True)

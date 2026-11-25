@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..agent.base import AgentTool, ExecutionMode, ToolUpdateCallback
-from ..agent.types import ToolResult
+from ..agent.types import ToolCapability, ToolResult
 from ..ai.base import ToolSpec
 
 ToolHandler = Callable[[dict[str, Any]], str | Awaitable[str]]
@@ -125,6 +125,11 @@ class ToolCatalog:
         return tuple(self._deferred)
 
     @property
+    def callable_tools(self) -> tuple[AgentTool, ...]:
+        """Tools another tool may invoke: all direct and deferred, never hidden."""
+        return (*self._direct, *self._deferred)
+
+    @property
     def hidden(self) -> tuple[AgentTool, ...]:
         return tuple(self._hidden)
 
@@ -147,6 +152,7 @@ class FunctionTool:
     spec: ToolSpec
     handler: ToolHandler
     execution_mode: ExecutionMode = "serial"
+    capability: ToolCapability | None = None
 
     async def execute(
         self,

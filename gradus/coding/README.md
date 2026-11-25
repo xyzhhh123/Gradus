@@ -30,10 +30,15 @@ It does:
 - gate tool calls through `before_tool_call` and render the event stream for logs and the terminal;
 - keep session history in memory and persist it;
 - context budget, compaction, retry, and model routing;
-- connect MCP servers listed in `.gradus/mcp.json` (the project config is confirmed once, then remembered) and expose their tools per server/`toolExposure` policy — `deferred` by default, loaded through `tool_search`; HTTP servers with `oauth` sign in through the browser and keep tokens in `~/.gradus/mcp-auth.json`;
+- recover a provider context-overflow failure once by forcing compaction/projection pruning and retrying;
+- require one evidence-oriented review turn after workspace changes unless a relevant test/build/lint command succeeds afterward;
+- expose optional tool capabilities to permissions, Codemode declarations, and runtime scheduling;
+- apply multi-file exact-context patches and persist structured workspace-change records in the session ledger;
+- accept only workspace-relative POSIX paths in file/search/patch tools, resolve them to canonical copy paths, and reject absolute, drive, UNC, `..`, and symlink escapes;
+- connect MCP servers listed in `.gradus/mcp.json` (the project config is confirmed once, then remembered) and expose their tools per server/`toolExposure` policy — `deferred` by default; codemode can search and call deferred tools in one script, while `tool_search` declares matches for repeated direct calls; HTTP servers with `oauth` sign in through the browser and keep tokens in `~/.gradus/mcp-auth.json`;
 - load extensions from `<workspace>/.gradus/extensions` (the directory needs trust) — Python tools, Markdown slash commands, and `SKILL.md` skills; `/reload` re-reads them without restarting;
-- read `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md` from the workspace and its ancestors, root-first, into the system prompt (no trust needed);
-- run commands and `codemode` through a replaceable execution environment: `restricted` (Windows, no admin: reads follow your account, writes only inside the copy; **no network isolation**), `appcontainer` (Windows, zero install, deprecated), `local` (host), or `docker` (long-lived container, no network by default, memory / CPU / PID limits, no host environment variables; **in testing**, kept as a cross-platform fallback); when the selected backend is unavailable it does not fall back to `local` — command tools are disabled with a warning;
+- read `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md` from the workspace and its ancestors, root-first, into the system prompt as lower-priority project guidance that cannot override safety boundaries or user instructions (no trust needed);
+- run commands and `codemode` through a replaceable execution environment: `restricted` (Windows, no admin: reads follow your account, writes only inside the copy; **no network isolation**), `appcontainer` (Windows, zero install, deprecated), `local` (host), or `docker` (long-lived container, no network by default, memory / CPU / PID limits, no host environment variables; **in testing**, kept as a cross-platform fallback); local Codemode explicitly reports that it is not a security sandbox and requires outer approval; when the selected backend is unavailable it does not fall back to `local` — command tools are disabled with a warning;
 - provide the CLI entry point.
 
 It does not:
@@ -79,7 +84,10 @@ gradus/coding/
 ├── coding_plan.md      # milestones, progress, open items
 ├── config.py           # config and model selection: env -> ModelSpec
 ├── session.py          # session assembly and JSONL history
+├── changes.py          # workspace change provenance ledger
+├── completion.py       # post-change verification gate
 ├── context.py          # token budget, cut point, summarization
+├── paths.py            # workspace-relative path contract and escape checks
 ├── retry.py            # run-level retry policy (same model)
 ├── retrieval.py        # tokenize + BM25 (tool_search / recall_history)
 ├── registry.py         # tool registry and function-tool adapter
@@ -93,7 +101,8 @@ gradus/coding/
 ├── workspace.py        # sandbox-owned workspace copy and merge back
 ├── cli.py              # command-line entry point
 ├── tools/
-│   ├── files.py        # read_file / write_file / edit / delete_file
+│   ├── files.py        # read_file / write_file / edit / apply_patch / delete_file
+│   ├── spill.py        # owner-scoped oversized output spill
 │   ├── search.py       # grep / glob
 │   ├── shell.py        # bash / powershell
 │   ├── skill.py        # use_skill: 读技能正文（分片）

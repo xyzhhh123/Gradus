@@ -19,7 +19,11 @@ import unittest
 from typing import Any
 
 from gradus.agent.base import LoopConfig
-from gradus.agent.loop import run_loop
+from gradus.agent.loop import (
+    BARE_TRUNCATION_NOTICE,
+    MAX_BARE_TRUNCATION_RETRIES,
+    run_loop,
+)
 from gradus.agent.tests.fakes import (
     BadResultTool,
     CancelOnSecondTool,
@@ -247,8 +251,20 @@ class AgentLoopTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result, ToolResultMessage)
         self.assertTrue(result.is_error)
 
-    async def test_length_without_tool_calls_finishes(self):
-        provider = make_provider(text_script("partial", reason="length"))
+    async def test_length_without_tool_calls_retries_then_finishes(self):
+        """撞输出上限且没有工具调用等于空转：先纠正它继续，补救用尽才收工。
+
+        实测：模型读完 31 KB 的检查器后想一次写出整个解，32k 上限被截断；
+        调到 64k 之后它照样写到 64k——上限不是解法。而直接收工会让外部
+        把「什么都没做」当成「任务已完成」。
+        """
+        # 每一轮都截断：1 次原始轮 + MAX_BARE_TRUNCATION_RETRIES 次补救，全部撞上限
+        provider = RecordingProvider(
+            make_provider(
+                *[text_script("partial", reason="length")]
+                * (1 + MAX_BARE_TRUNCATION_RETRIES)
+            )
+        )
 
         events = await collect(provider, [])
 
@@ -258,8 +274,53 @@ class AgentLoopTest(unittest.IsolatedAsyncioTestCase):
         done = events[-1]
         self.assertIsInstance(done, AgentDone)
         self.assertEqual(done.stop_reason, "length")
-        self.assertEqual(done.turns, 1)
-        self.assertEqual(len(done.new_messages), 1)
+        # 1 次原始轮 + MAX_BARE_TRUNCATION_RETRIES 次补救
+        self.assertEqual(done.turns, 1 + MAX_BARE_TRUNCATION_RETRIES)
+        self.assertEqual(
+            len(provider.requests),
+            1 + MAX_BARE_TRUNCATION_RETRIES,
+        )
+
+        notices = [
+            message
+            for message in done.new_messages
+            if isinstance(message, UserMessage) and message.origin == "harness"
+        ]
+        self.assertEqual(len(notices), MAX_BARE_TRUNCATION_RETRIES)
+        self.assertTrue(
+            all(message.content == BARE_TRUNCATION_NOTICE for message in notices)
+        )
+        for request in provider.requests[1:]:
+            self.assertIsInstance(request.messages[-1], UserMessage)
+            self.assertEqual(request.messages[-1].origin, "harness")
+            self.assertEqual(request.messages[-1].content, BARE_TRUNCATION_NOTICE)
+
+    async def test_bare_truncation_retry_can_recover_with_a_tool_call(self):
+        tool = FakeTool("echo", required=("text",))
+        provider = RecordingProvider(
+            make_provider(
+                text_script("partial", reason="length"),
+                tool_script([("call_0", "echo", {"text": "a"})]),
+                text_script("done"),
+            )
+        )
+
+        events = await collect(provider, [tool])
+
+        self.assertEqual(tool.calls, [("call_0", {"text": "a"})])
+        done = events[-1]
+        self.assertIsInstance(done, AgentDone)
+        self.assertEqual(done.turns, 3)
+        self.assertEqual(done.stop_reason, "stop")
+
+        notices = [
+            message
+            for message in done.new_messages
+            if isinstance(message, UserMessage) and message.origin == "harness"
+        ]
+        self.assertEqual(len(notices), 1)
+        self.assertEqual(notices[0].content, BARE_TRUNCATION_NOTICE)
+        self.assertIs(provider.requests[1].messages[-1], notices[0])
 
     async def test_stop_with_tool_calls_does_not_execute(self):
         tool = FakeTool("echo", required=("text",))

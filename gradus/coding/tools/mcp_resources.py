@@ -4,7 +4,8 @@
 
 - 不传 `server` 时列出所有已连 server 的资源，并汇总各 server 的错误；
 - 传 `server` 时只列一页，`cursor` 续下一页；
-- 读取必须同时给 `server` 与 `uri`；文本直接返回，二进制落临时文件并返回路径。
+- 读取必须同时给 `server` 与 `uri`；文本直接返回，二进制落 workspace 内
+  `.gradus/spill/` 并返回可被 `read_file` 读取的相对路径。
 
 只负责资源读取，不负责连接（`mcp.py`）、权限（`permissions.py`）。
 """
@@ -22,6 +23,7 @@ from ...agent.base import AgentTool
 from ...ai.base import ToolSpec
 from ..mcp import McpServerHandle, clip_result
 from ..registry import FunctionTool
+from .spill import SpillStore
 
 LIST_PARAMETERS = {
     "type": "object",
@@ -81,16 +83,23 @@ READ_RESOURCE_SPEC = ToolSpec(
 
 def create_mcp_resource_tools(
     handles: Sequence[McpServerHandle],
+    spill_store: SpillStore | None = None,
 ) -> tuple[AgentTool, ...]:
     """按已连上的 server 生成三个只读资源工具。"""
 
     async def list_resources(arguments: dict[str, Any]) -> str:
         payload = await _list(handles, arguments, "resources")
-        return clip_result(json.dumps(payload, ensure_ascii=False, indent=2))
+        return clip_result(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            spill_store,
+        )
 
     async def list_templates(arguments: dict[str, Any]) -> str:
         payload = await _list(handles, arguments, "resourceTemplates")
-        return clip_result(json.dumps(payload, ensure_ascii=False, indent=2))
+        return clip_result(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            spill_store,
+        )
 
     async def read_resource(arguments: dict[str, Any]) -> str:
         server_name = _string_arg(arguments, "server")
@@ -102,7 +111,10 @@ def create_mcp_resource_tools(
 
         handle = _find(handles, server_name)
         result = await handle.read_resource(uri)
-        return clip_result(_render_contents(result.contents))
+        return clip_result(
+            _render_contents(result.contents, spill_store),
+            spill_store,
+        )
 
     return (
         FunctionTool(LIST_RESOURCES_SPEC, list_resources, execution_mode="parallel"),
@@ -194,7 +206,10 @@ def _visible(item: Any) -> bool:
     return not (uri.startswith("ui://") or "mcp-app" in mime.lower())
 
 
-def _render_contents(contents: Sequence[Any]) -> str:
+def _render_contents(
+    contents: Sequence[Any],
+    spill_store: SpillStore | None = None,
+) -> str:
     if not contents:
         return "(empty resource)"
 
@@ -208,12 +223,19 @@ def _render_contents(contents: Sequence[Any]) -> str:
             continue
         data = base64.b64decode(getattr(item, "blob", ""))
         mime = getattr(item, "mime_type", None)
-        path = _spill_bytes(data, mime)
+        path = _spill_bytes(data, mime, spill_store)
         parts.append(f"{prefix}[binary {mime or 'unknown'}: {path}]")
     return "\n".join(parts)
 
 
-def _spill_bytes(data: bytes, mime: str | None) -> str:
+def _spill_bytes(
+    data: bytes,
+    mime: str | None,
+    spill_store: SpillStore | None = None,
+) -> str:
+    if spill_store is not None:
+        path = spill_store.spill_bytes(data, hint="mcp")
+        return spill_store.display_path(path)
     suffix = mimetypes.guess_extension(mime) if mime else None
     handle = tempfile.NamedTemporaryFile(
         "wb", suffix=suffix or "", prefix="gradus-mcp-", delete=False

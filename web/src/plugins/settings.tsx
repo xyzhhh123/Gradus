@@ -282,8 +282,8 @@ function SettingsPanel({ store }: { store: SettingsApi }) {
           <section className="settings-section">
             <h3>上下文预算</h3>
             <p className="settings-hint">
-              窗口是「按多大做上下文管理」，不是模型能力：留空按模型能力走，填了只往下压。
-              触发线 = 窗口 − 预留，越过它才压缩。
+              窗口是「按多大做上下文管理」，不是模型能力：留空使用 Gradus 的默认工作预算，
+              填了只往下压。Gradus 会在此基础上按内部比例和上下限决定压缩触发线。
             </p>
             <div className="settings-row">
               <span className="settings-label">保留量</span>
@@ -307,9 +307,12 @@ function SettingsPanel({ store }: { store: SettingsApi }) {
               <span className="settings-label">当前</span>
               <span className="settings-budget">
                 {data?.current.compactionThreshold
-                  ? `窗口 ${formatTokens(data.current.windowLimit ?? data.current.contextWindow)} · ` +
+                  ? `工作窗口 ${formatTokens(data.current.contextWindow)} · ` +
                     `触发线 ${formatTokens(data.current.compactionThreshold)} · ` +
-                    `保留 ${formatTokens(data.current.keepRecent)}`
+                    `保留 ${formatTokens(data.current.keepRecent)}` +
+                    (data.current.windowLimit
+                      ? ` · 能力上限 ${formatTokens(data.current.windowLimit)}`
+                      : '')
                   : '未知（模型能力与窗口都没定）'}
               </span>
             </div>
@@ -397,13 +400,13 @@ function SettingsPanel({ store }: { store: SettingsApi }) {
                       {draft.hasKey && <span className="settings-badge">已存 key</span>}
                     </div>
                     <div className="settings-model-row">
-                      <label className="settings-field" title="按多大做上下文管理；留空按模型能力或默认值">
+                      <label className="settings-field" title="按多大做上下文管理；留空使用 Gradus 默认工作预算">
                         <span>窗口</span>
                         <input
                           className="settings-input settings-limit"
                           inputMode="numeric"
                           value={draft.contextWindow}
-                          placeholder={'默认 ' + formatTokens(draft.windowLimit ?? draft.effectiveWindow)}
+                          placeholder={'默认 ' + formatTokens(draft.effectiveWindow)}
                           onChange={event => patch(index, { contextWindow: event.target.value })}
                         />
                       </label>
@@ -419,7 +422,7 @@ function SettingsPanel({ store }: { store: SettingsApi }) {
                       </label>
                       <span className="settings-model-meta">
                         {draft.windowLimit
-                          ? `上限 ${formatTokens(draft.windowLimit)} / ${formatTokens(draft.outputLimit)}`
+                          ? `能力上限 ${formatTokens(draft.windowLimit)} / ${formatTokens(draft.outputLimit)}`
                           : '上限未知'}
                       </span>
                     </div>

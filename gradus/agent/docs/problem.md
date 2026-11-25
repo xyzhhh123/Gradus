@@ -88,6 +88,16 @@
 - **验证**：`test_length_with_tool_calls_returns_errors_and_continues`、`test_length_without_tool_calls_finishes`。
 - **关联**：`agent_plan.md` 的 M5 与 AG-14。
 
+### AG-18 无工具调用的 `length` 被当成正常完成
+
+- **状态**：已解决（2026-11-24）
+- **现象**：模型想一次输出完整方案，达到输出上限时没有写出 tool call；循环直接发 `AgentDone(stop_reason="length")`，上层容易把“什么都没执行”当成任务完成。
+- **触发**：长文件或整套实现被输出 token 上限截断，且截断发生在第一个工具调用之前。
+- **原因**：`length` 且无工具调用时没有可回传的 tool result，循环把“没有 `tool_use`”直接解释成结束。
+- **解决**：新增空转截断补救：最多注入两次 `UserMessage(origin="harness")`，要求模型停止复述计划，只执行一个具体动作；提示在下一轮真正开始前同时写入 transcript 与 `new_messages`，并计入 `max_turns`。补救用尽后仍以 `AgentDone(stop_reason="length")` 结束，但 CLI 与 Web 都显式标记为截断/未完成。
+- **验证**：`test_length_without_tool_calls_retries_then_finishes`、`test_bare_truncation_retry_can_recover_with_a_tool_call`、`test_agent_done_marks_a_truncated_response`、Web reducer 的 `lastStopReason` 用例。
+- **关联**：AG-14；`agent_plan.md` 的 `length` 决策表。
+
 ### AG-15 `prepare_next_turn` 注入的消息在取消时被写进历史
 
 - **状态**：已解决（2026-11-03）

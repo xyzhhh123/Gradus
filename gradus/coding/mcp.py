@@ -47,6 +47,7 @@ from ..agent.types import ToolResult
 from ..ai.base import ToolSpec
 from . import oauth
 from .registry import EXPOSURES, Exposure, ToolError, merge_tools
+from .tools.spill import SpillStore
 
 #: 工作区内的默认配置路径。
 CONFIG_RELPATH = Path(".gradus") / "mcp.json"
@@ -246,6 +247,7 @@ class McpSession:
     handles: tuple[McpServerHandle, ...]
     resource_handles: tuple[McpServerHandle, ...]
     errors: tuple[str, ...]
+    spill_store: SpillStore | None = None
 
     @property
     def servers(self) -> tuple[str, ...]:
@@ -291,7 +293,7 @@ class McpSession:
                     exposure = effective_exposure(handle.server, tool.name)
                     if exposure == "hidden":
                         continue
-                    wrapped = _make_tool(handle, tool)
+                    wrapped = _make_tool(handle, tool, self.spill_store)
                     if exposure == "direct":
                         direct.append(wrapped)
                     else:
@@ -316,6 +318,7 @@ class McpSession:
             handles=self.handles,
             resource_handles=tuple(resource_handles),
             errors=self.errors,
+            spill_store=self.spill_store,
         )
 
 
@@ -328,6 +331,7 @@ class McpTool:
     remote_name: str
     handle: McpServerHandle
     server: str = ""
+    spill_store: SpillStore | None = None
 
     async def execute(
         self,
@@ -341,7 +345,10 @@ class McpTool:
             )
         except Exception as exc:  # 连接断开、超时、server 返回错误都归到这里
             return ToolResult(f"mcp call failed: {type(exc).__name__}: {exc}", is_error=True)
-        return ToolResult(clip_result(render_result(result)), is_error=bool(result.is_error))
+        return ToolResult(
+            clip_result(render_result(result), self.spill_store),
+            is_error=bool(result.is_error),
+        )
 
 
 def default_config_path(workspace: str | Path) -> Path:
@@ -474,7 +481,10 @@ def make_tool_name(server: str, tool: str) -> str:
     return f"{NAME_PREFIX}{server_part}{NAME_SEPARATOR}{tool_part}"
 
 
-def clip_result(text: str) -> str:
+def clip_result(
+    text: str,
+    spill_store: SpillStore | None = None,
+) -> str:
     """超过上限时去掉中间，把全文写进临时文件并在结果里给出路径。"""
     if len(text) <= MAX_RESULT_CHARS:
         return text
@@ -482,7 +492,7 @@ def clip_result(text: str) -> str:
     head_size = MAX_RESULT_CHARS // 2
     tail_size = MAX_RESULT_CHARS - head_size
     removed = len(text) - MAX_RESULT_CHARS
-    path = _spill(text)
+    path = _spill(text, spill_store)
     return (
         f"{text[:head_size]}\n"
         f"…{removed} chars truncated…\n"
@@ -491,7 +501,11 @@ def clip_result(text: str) -> str:
     )
 
 
-def _spill(text: str) -> str:
+def _spill(text: str, spill_store: SpillStore | None = None) -> str:
+    if spill_store is not None:
+        return spill_store.display_path(
+            spill_store.spill(text, hint="mcp")
+        )
     handle = tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", suffix=".txt", prefix="gradus-mcp-", delete=False
     )
@@ -551,7 +565,10 @@ def _close_sink(errlog: Any) -> None:
 
 
 async def connect(
-    servers: Sequence[McpServer], *, interactive: bool = True
+    servers: Sequence[McpServer],
+    *,
+    interactive: bool = True,
+    spill_store: SpillStore | None = None,
 ) -> McpSession:
     """连上启用的 server 并列出工具。
 
@@ -603,7 +620,7 @@ async def connect(
             exposure = effective_exposure(server, tool.name)
             if exposure == "hidden":
                 continue
-            wrapped = _make_tool(handle, tool)
+            wrapped = _make_tool(handle, tool, spill_store)
             if exposure == "direct":
                 direct.append(wrapped)
             else:
@@ -628,6 +645,7 @@ async def connect(
         handles=tuple(handles),
         resource_handles=tuple(resource_handles),
         errors=tuple(errors),
+        spill_store=spill_store,
     )
 
 
@@ -726,7 +744,11 @@ async def _open_client(
     return await stack.enter_async_context(Client(server.url, message_handler=handler))
 
 
-def _make_tool(handle: McpServerHandle, tool: Any) -> McpTool:
+def _make_tool(
+    handle: McpServerHandle,
+    tool: Any,
+    spill_store: SpillStore | None = None,
+) -> McpTool:
     annotations = getattr(tool, "annotations", None)
     read_only = bool(getattr(annotations, "read_only_hint", False))
     description = getattr(tool, "description", None) or ""
@@ -740,6 +762,7 @@ def _make_tool(handle: McpServerHandle, tool: Any) -> McpTool:
         remote_name=tool.name,
         handle=handle,
         server=handle.name,
+        spill_store=spill_store,
     )
 
 

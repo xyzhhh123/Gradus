@@ -73,6 +73,22 @@ class RenderTest(unittest.TestCase):
         self.assertIn("[done] 2 turns", text)
         self.assertIn("in 10", text)
         self.assertIn("out 5", text)
+        # 正常收工不该出现截断标记
+        self.assertNotIn("truncated", text)
+
+    def test_agent_done_marks_a_truncated_response(self):
+        """`length` 意味着撞上输出上限、任务没做完，必须和正常收工区分开。"""
+        event = AgentDone(
+            new_messages=[],
+            usage=Usage(input_tokens=10, output_tokens=8192),
+            turns=2,
+            stop_reason="length",
+        )
+
+        text = render(event)
+
+        self.assertIn("[done] 2 turns", text)
+        self.assertIn("truncated", text)
 
     def test_agent_error(self):
         event = AgentError(

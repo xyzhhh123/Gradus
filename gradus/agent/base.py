@@ -16,7 +16,7 @@ from typing import Any, Literal, Protocol
 from ..ai.base import ReasoningLevel, ToolSpec
 from ..ai.types import Message
 from .hooks import AgentHooks
-from .types import ToolResult
+from .types import ToolCapability, ToolResult
 
 ExecutionMode = Literal["serial", "parallel"]
 ToolUpdateCallback = Callable[[str], None]
@@ -46,6 +46,8 @@ class AgentTool(Protocol):
 
     spec: ToolSpec
     execution_mode: ExecutionMode
+    #: Optional execution semantics. Missing metadata is treated as unknown.
+    capability: ToolCapability | None
 
     async def execute(
         self,
@@ -54,6 +56,12 @@ class AgentTool(Protocol):
         on_update: ToolUpdateCallback | None = None,
     ) -> ToolResult:
         ...
+
+
+def tool_capability(tool: AgentTool) -> ToolCapability | None:
+    """Read optional capability metadata without breaking existing tools."""
+    capability = getattr(tool, "capability", None)
+    return capability if isinstance(capability, ToolCapability) else None
 
 
 @dataclass(frozen=True)
@@ -78,6 +86,7 @@ class LoopConfig:
     max_output_tokens: int | None = None
     temperature: float | None = None
     reasoning: ReasoningLevel | None = None
+    allow_parallel_tools: bool = True
     tool_timeout: float | None = None
     hooks: AgentHooks = field(default_factory=AgentHooks)
     get_steering_messages: Callable[[], Sequence[Message]] | None = None

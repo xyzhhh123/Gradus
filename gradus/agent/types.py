@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Literal, Union
 
@@ -64,6 +65,90 @@ class ToolResult:
     details: Any = None
     structured_content: Any = None
     usage: Usage | None = None
+
+
+ToolEffect = Literal[
+    "read",
+    "search",
+    "write",
+    "execute",
+    "network",
+    "delegate",
+    "control",
+]
+ToolResultKind = Literal["evidence", "diagnostic", "output", "control"]
+
+
+@dataclass(frozen=True)
+class ToolCapability:
+    """Execution semantics shared by permissions, discovery, and context policy.
+
+    The capability does not enter the Provider tool schema; models still see only
+    `ToolSpec`. An empty effect set means unknown and must be handled
+    conservatively by callers.
+    """
+
+    effects: tuple[ToolEffect, ...] = ()
+    result_kind: ToolResultKind = "evidence"
+    mutates_workspace: bool = False
+    idempotent: bool = True
+    retryable: bool = False
+    #: Effects happen through nested tools that re-enter the same policy gate.
+    contained_effects: bool = False
+
+    @property
+    def read_only(self) -> bool:
+        return bool(self.effects) and all(
+            effect in {"read", "search"} for effect in self.effects
+        )
+
+    @property
+    def executes(self) -> bool:
+        return "execute" in self.effects
+
+    @property
+    def delegates(self) -> bool:
+        return "delegate" in self.effects
+
+
+MAX_STRUCTURED_RESULT_CHARS = 20_000
+
+
+def render_structured_content(value: Any) -> str:
+    """Render machine-readable output deterministically."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        return repr(value)
+
+
+def model_visible_tool_content(result: ToolResult) -> str:
+    """Return the text that must enter model history for a tool result.
+
+    Provider adapters currently accept text-only tool results, so structured data
+    is rendered once before history storage. Every Provider then sees the same
+    evidence without four simultaneous protocol changes.
+    """
+    structured = render_structured_content(result.structured_content)
+    if not structured.strip() or structured in result.content:
+        return result.content
+
+    block = f"<structured_result>\n{structured}\n</structured_result>"
+    content = f"{result.content}\n\n{block}" if result.content else block
+    if len(content) <= MAX_STRUCTURED_RESULT_CHARS:
+        return content
+
+    marker = "\n...[structured result truncated]"
+    return content[: MAX_STRUCTURED_RESULT_CHARS - len(marker)] + marker
 
 
 # =============================================================================

@@ -13,6 +13,7 @@ from gradus.ai.types import AssistantMessage, TextBlock, Usage, UserMessage
 from gradus.agent.types import AgentDone, AgentError
 from gradus.coding import retry, session
 from gradus.coding.config import Settings
+from gradus.coding.context import ContextBudget
 from gradus.coding.permissions import Policy
 from gradus.coding.tools.files import FileTracker
 
@@ -52,13 +53,14 @@ def _done(new_messages=None) -> AgentDone:
 class _FakeAgent:
     """按剧本产事件的替身，只实现 `_run` 用到的接口。"""
 
-    def __init__(self, scripts):
+    def __init__(self, scripts, messages=()):
         self.scripts = list(scripts)
         self.calls: list[str] = []
+        self._messages = list(messages)
 
     @property
     def messages(self):
-        return ()
+        return tuple(self._messages)
 
     def prompt(self, text: str, *, origin: str = "user"):
         self.calls.append("prompt")
@@ -121,10 +123,28 @@ class IsRetryableTest(unittest.TestCase):
     def test_client_error_is_not_retryable(self):
         self.assertFalse(retry.is_retryable(_error(message="HTTP 401: bad key")))
         self.assertFalse(retry.is_retryable(_error(message="HTTP 400: bad request")))
+        self.assertFalse(retry.is_retryable(_error(message="HTTP 413: too large")))
 
     def test_other_kinds_are_not_retryable(self):
         for kind in ("aborted", "max_turns", "config"):
             self.assertFalse(retry.is_retryable(_error(kind=kind)), kind)
+
+    def test_context_overflow_is_classified_but_not_generic_retryable(self):
+        for message in (
+            "context_length_exceeded",
+            "maximum context length is 128000 tokens",
+            "prompt is too long",
+            "HTTP 413: request too large",
+        ):
+            with self.subTest(message=message):
+                error = _error(message=message)
+                self.assertTrue(retry.is_context_overflow(error))
+                self.assertFalse(retry.is_retryable(error))
+
+    def test_normal_client_error_is_not_context_overflow(self):
+        self.assertFalse(
+            retry.is_context_overflow(_error(message="HTTP 401: bad key"))
+        )
 
 
 class SessionRetryTest(unittest.IsolatedAsyncioTestCase):
@@ -252,6 +272,57 @@ class SessionRetryTest(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(agent.calls, ["prompt", "continue"])
             self.assertEqual(log.messages, [UserMessage("hi"), answer])
+
+    async def test_context_overflow_forces_projection_and_retries_once(self):
+        history = [
+            UserMessage("a" * 400),
+            AssistantMessage([TextBlock("b" * 400)], stop_reason="stop"),
+            UserMessage("c" * 400),
+            AssistantMessage([TextBlock("d" * 400)], stop_reason="stop"),
+        ]
+        agent = _FakeAgent(
+            [
+                [_error(message="prompt is too long for the context window")],
+                [_done()],
+            ],
+            messages=history,
+        )
+        one = _session(agent)
+
+        async def no_compact(**kwargs):
+            return None
+
+        with (
+            patch.object(session, "RetryPolicy", _policy),
+            patch.object(session, "_budget_for", return_value=ContextBudget(200, 20, 20)),
+            patch.object(one, "_maybe_compact", side_effect=no_compact),
+        ):
+            events = await self._collect(one)
+
+        self.assertEqual(agent.calls, ["prompt", "continue"])
+        self.assertTrue(one._overflow_slot[0])
+        self.assertIsInstance(events[-1], AgentDone)
+
+    async def test_context_overflow_without_shrinkable_context_fails(self):
+        history = [UserMessage("a" * 1000)]
+        agent = _FakeAgent(
+            [[_error(message="context_length_exceeded")]],
+            messages=history,
+        )
+        one = _session(agent)
+
+        async def no_compact(**kwargs):
+            return None
+
+        with (
+            patch.object(session, "RetryPolicy", _policy),
+            patch.object(session, "_budget_for", return_value=ContextBudget(200, 20, 20)),
+            patch.object(one, "_maybe_compact", side_effect=no_compact),
+        ):
+            events = await self._collect(one)
+
+        self.assertEqual(agent.calls, ["prompt"])
+        self.assertIsInstance(events[-1], AgentError)
 
 
 if __name__ == "__main__":

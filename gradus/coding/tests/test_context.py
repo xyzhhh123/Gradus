@@ -186,6 +186,38 @@ class TrimTest(unittest.TestCase):
         self.assertEqual(kept, messages)
 
 
+class ToolResultPruneTest(unittest.TestCase):
+    def test_prunes_old_text_middle_and_preserves_metadata(self):
+        old = ToolResultMessage(tool_call_id="old", content="a" * 10_000, is_error=True)
+        current = ToolResultMessage(tool_call_id="new", content="b" * 10_000)
+
+        result = context.prune_tool_results(
+            [old, UserMessage("current turn"), current],
+            before=1,
+        )
+
+        self.assertEqual(result.count, 1)
+        self.assertGreater(result.chars_removed, 0)
+        self.assertIsInstance(result.messages[0], ToolResultMessage)
+        self.assertEqual(result.messages[0].tool_call_id, "old")
+        self.assertTrue(result.messages[0].is_error)
+        self.assertIn(context.TOOL_RESULT_PRUNE_MARKER, result.messages[0].content)
+        self.assertEqual(result.messages[2], current)
+
+    def test_small_results_are_unchanged(self):
+        message = ToolResultMessage(tool_call_id="c1", content="small")
+
+        result = context.prune_tool_results(
+            [message],
+            threshold_chars=16,
+            head_chars=8,
+            tail_chars=4,
+        )
+
+        self.assertEqual(result.count, 0)
+        self.assertEqual(result.messages, [message])
+
+
 class SerializeTest(unittest.TestCase):
     def test_labels_each_role(self):
         messages: Sequence[Message] = [
@@ -571,8 +603,8 @@ class BudgetTest(unittest.TestCase):
         large = context.retention_budget(1_000_000)
 
         self.assertEqual(small, 6_808)          # 下限被「触发线一半」截住
-        self.assertEqual(medium, 27_904)        # 0.25 × 111,616
-        self.assertEqual(large, 64_000)         # 撞上限
+        self.assertEqual(medium, 20_928)        # 0.25 × 83,712
+        self.assertEqual(large, 40_000)         # 0.25 × 160,000
         self.assertLess(small, medium)
         self.assertLess(medium, large)
         for window in (30_000, 128_000, 1_000_000):
@@ -586,7 +618,7 @@ class BudgetTest(unittest.TestCase):
         balanced = context.retention_budget(window, preset="balanced")
         aggressive = context.retention_budget(window, preset="aggressive")
 
-        self.assertEqual((conservative, balanced, aggressive), (18_361, 45_904, 73_446))
+        self.assertEqual((conservative, balanced, aggressive), (13_771, 34_428, 55_084))
         self.assertLess(conservative, balanced)
         self.assertLess(balanced, aggressive)
 
@@ -611,14 +643,14 @@ class BudgetTest(unittest.TestCase):
 
     def test_bigger_model_reserve_shrinks_threshold(self):
         window = 200_000
-        self.assertEqual(context.compact_threshold(window), 183_616)
+        self.assertEqual(context.compact_threshold(window), 137_712)
         self.assertEqual(
             context.compact_threshold(window, context.budget_reserve(65_536)),
-            134_464,
+            100_848,
         )
         self.assertEqual(
             context.retention_budget(window, context.budget_reserve(65_536)),
-            33_616,
+            25_212,
         )
 
     def test_validate_rejects_reserve_that_leaves_no_room(self):
@@ -633,15 +665,15 @@ class ContextBudgetTest(unittest.TestCase):
         budget = context.ContextBudget.for_model(200_000, 8_192)
 
         self.assertEqual(budget.reserve, context.DEFAULT_RESERVE_TOKENS)
-        self.assertEqual(budget.threshold, 183_616)
-        self.assertEqual(budget.keep_recent, 45_904)
+        self.assertEqual(budget.threshold, 137_712)
+        self.assertEqual(budget.keep_recent, 34_428)
 
     def test_big_output_shrinks_threshold(self):
         budget = context.ContextBudget.for_model(200_000, 65_536)
 
         self.assertEqual(budget.reserve, 65_536)
-        self.assertEqual(budget.threshold, 134_464)
-        self.assertEqual(budget.keep_recent, 33_616)
+        self.assertEqual(budget.threshold, 100_848)
+        self.assertEqual(budget.keep_recent, 25_212)
 
     def test_small_window_shrinks_keep(self):
         budget = context.ContextBudget.for_model(30_000, 8_192)

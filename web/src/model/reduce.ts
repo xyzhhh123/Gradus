@@ -87,13 +87,20 @@ function fromSnapshot(state: SessionState, snapshot: Snapshot): SessionState {
     turns: [],
     pendingConfirm: null,
     error: null,
+    lastStopReason: snapshot.lastStopReason ?? null,
   }
 }
 
 export function applyEvent(state: SessionState, event: WireEvent): SessionState {
   switch (event.type) {
     case 'agent/start':
-      return { ...state, status: 'running', turns: [], error: null }
+      return {
+        ...state,
+        status: 'running',
+        turns: [],
+        error: null,
+        lastStopReason: null,
+      }
 
     case 'turn/start':
       return { ...state, turns: [...state.turns, { index: event.turn, assistant: '', tools: [] }] }
@@ -137,18 +144,23 @@ export function applyEvent(state: SessionState, event: WireEvent): SessionState 
       return updateLastTurn(state, turn => ({ ...turn, usage: event.usage }))
 
     case 'agent/done':
-      return { ...state, status: 'idle' }
+      return {
+        ...state,
+        status: 'idle',
+        lastStopReason: event.stopReason ?? null,
+      }
 
     case 'agent/error': {
       // 被中止不是失败：回到就绪，只把还在跑的工具标成已取消。
       const next = cancelRunningTools(state)
       if (event.kind === 'aborted') {
-        return { ...next, status: 'idle', error: null }
+        return { ...next, status: 'idle', error: null, lastStopReason: null }
       }
       return {
         ...next,
         status: 'error',
         error: { kind: event.kind, message: event.message },
+        lastStopReason: null,
       }
     }
 

@@ -25,15 +25,22 @@ from pathlib import Path
 from typing import Any
 
 from ...agent.base import AgentTool, ToolUpdateCallback
-from ...agent.types import ToolResult
+from ...agent.types import ToolCapability, ToolResult
 from ...ai.base import ToolSpec
 from ..background import BackgroundLimit, BackgroundTasks
 from ..sandbox import Environment, LocalEnvironment, SandboxError
-from .spill import with_pointer
+from .spill import SpillStore
 
 DEFAULT_TIMEOUT = 120.0
 MAX_TIMEOUT = 600.0
 MAX_OUTPUT = 30_000
+
+COMMAND_CAPABILITY = ToolCapability(
+    effects=("execute",),
+    result_kind="output",
+    mutates_workspace=True,
+    idempotent=False,
+)
 
 _TIMEOUT_SCHEMA = {
     "type": "number",
@@ -54,8 +61,10 @@ _BACKGROUND_SCHEMA = {
 BASH_SPEC = ToolSpec(
     name="bash",
     description=(
-        "Execute a bash command in the working directory. Returns combined stdout "
-        "and stderr; a non-zero exit code is reported as an error. "
+        "Execute a bash command in the working directory. Prefer read_file/edit/write_file "
+        "for source inspection and modification; use Bash for builds, tests, git, and commands "
+        "that cannot be expressed with the file tools. Returns combined stdout and stderr; "
+        "a non-zero exit code is reported as an error. "
         f"Output is capped at {MAX_OUTPUT // 1000}KB and the call times out after "
         f"{DEFAULT_TIMEOUT:g}s unless timeout is given."
     ),
@@ -94,6 +103,7 @@ class ShellTool:
     """按给定解释器执行一条命令。"""
 
     execution_mode = "serial"
+    capability = COMMAND_CAPABILITY
 
     def __init__(
         self,
@@ -104,6 +114,7 @@ class ShellTool:
         env: Environment | None = None,
         background: BackgroundTasks | None = None,
         output_chars: int | None = None,
+        spill_store: SpillStore | None = None,
     ) -> None:
         # 归一化：Windows 的 8.3 短名（`RUNNER~1`）与长名是同一个目录，
         # 但字符串不同。Environment 实现内部一律用 resolve 后的路径比较，
@@ -115,6 +126,7 @@ class ShellTool:
         self._env = env or LocalEnvironment(self._root)
         self._background = background
         self._output_chars = output_chars or MAX_OUTPUT
+        self._spill = spill_store or SpillStore()
 
     async def execute(
         self,
@@ -154,7 +166,11 @@ class ShellTool:
         if not text.strip():
             text = "(no output)"
         # 超限先落盘、再给指针：截断掉的部分就再也拿不回来了。
-        text = with_pointer(text, self._output_chars, hint=self.spec.name)
+        text = self._spill.with_pointer(
+            text,
+            self._output_chars,
+            hint=self.spec.name,
+        )
 
         code = process.returncode or 0
         if code != 0:
@@ -186,7 +202,6 @@ class ShellTool:
         return ToolResult(
             f"[background {task.id} started]\n"
             f"status: running\n"
-            f"log: {task.log_path}\n"
             "A <task_notification> arrives when it finishes; "
             "call check_background to inspect it earlier.",
             details={"background_task_id": task.id, "status": "running"},
@@ -198,6 +213,7 @@ def create_shell_tools(
     env: Environment | None = None,
     background: BackgroundTasks | None = None,
     output_chars: int | None = None,
+    spill_store: SpillStore | None = None,
 ) -> list[AgentTool]:
     """按当前环境能跑什么决定注册哪些命令工具。
 
@@ -213,7 +229,14 @@ def create_shell_tools(
     if environment.name in ("docker", "exec"):
         return [
             ShellTool(
-                base, "bash", ("-lc",), BASH_SPEC, environment, background, output_chars
+                base,
+                "bash",
+                ("-lc",),
+                BASH_SPEC,
+                environment,
+                background,
+                output_chars,
+                spill_store,
             )
         ]
 
@@ -232,6 +255,7 @@ def create_shell_tools(
                 environment,
                 background,
                 output_chars,
+                spill_store,
             )
         ]
 
@@ -239,7 +263,14 @@ def create_shell_tools(
     if bash:
         tools.append(
             ShellTool(
-                base, bash, ("-lc",), BASH_SPEC, environment, background, output_chars
+                base,
+                bash,
+                ("-lc",),
+                BASH_SPEC,
+                environment,
+                background,
+                output_chars,
+                spill_store,
             )
         )
 
@@ -255,6 +286,7 @@ def create_shell_tools(
                     environment,
                     background,
                     output_chars,
+                    spill_store,
                 )
             )
 

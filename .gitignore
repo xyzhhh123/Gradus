@@ -29,8 +29,15 @@ Thumbs.db
 # 评测产物（轨迹、补丁、容器日志）
 bench/runs/
 bench/build-context/
+bench/tb-results.csv
 # Harbor 在仓库根目录建的工作目录（每次 harbor run 一份）
 jobs/
+
+# Agent 工作用的临时规划目录
+.planning/
+
+# Terminal-Bench：题目定义（507 MB）与便携 bundle（523 MB）
+bench/.cache/
 
 # 录屏素材（只提交转好的 gif）
 *.mp4

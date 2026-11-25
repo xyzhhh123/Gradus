@@ -100,15 +100,21 @@ class FileToolsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.is_error)
         self.assertIn("beyond end of file", result.content)
 
-    async def test_read_accepts_absolute_path_outside_root(self):
+    async def test_read_rejects_absolute_path_outside_root(self):
         with tempfile.TemporaryDirectory() as other:
             outside = Path(other) / "outside.txt"
             outside.write_text("outside", encoding="utf-8")
 
             result = await self._read(path=str(outside))
 
-        self.assertFalse(result.is_error)
-        self.assertEqual(result.content, "outside")
+        self.assertTrue(result.is_error)
+        self.assertIn("must be relative", result.content)
+
+    async def test_read_rejects_parent_traversal(self):
+        result = await self._read(path="../outside.txt")
+
+        self.assertTrue(result.is_error)
+        self.assertIn("must not contain", result.content)
 
 class WriteToolsTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -125,6 +131,11 @@ class WriteToolsTest(unittest.IsolatedAsyncioTestCase):
 
     async def _edit(self, **arguments):
         return await self.tools["edit"].execute("call_1", arguments)
+
+    async def _patch(self, patch: str):
+        return await self.tools["apply_patch"].execute(
+            "call_patch", {"patch": patch}
+        )
 
     async def _read(self, **arguments):
         return await self.tools["read_file"].execute("call_1", arguments)
@@ -152,15 +163,75 @@ class WriteToolsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.is_error)
         self.assertIn("Not a file", result.content)
 
-    async def test_edit_requires_prior_read(self):
+    async def test_apply_patch_updates_and_adds_multiple_files(self):
+        self.path.write_text("alpha\nbeta\n", encoding="utf-8")
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: a.txt\n"
+            "@@\n"
+            " alpha\n"
+            "-beta\n"
+            "+gamma\n"
+            "*** Add File: nested/b.py\n"
+            "+one\n"
+            "+two\n"
+            "*** End Patch"
+        )
+
+        result = await self._patch(patch)
+
+        self.assertFalse(result.is_error, result.content)
+        self.assertEqual(self.path.read_text("utf-8"), "alpha\ngamma\n")
+        self.assertEqual(
+            (self.root / "nested/b.py").read_text("utf-8"),
+            "one\ntwo\n",
+        )
+        self.assertEqual(
+            [item["path"] for item in result.structured_content["workspace_changes"]],
+            ["a.txt", "nested/b.py"],
+        )
+
+    async def test_apply_patch_is_atomic_on_mismatch(self):
+        self.path.write_text("alpha\n", encoding="utf-8")
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: a.txt\n"
+            "@@\n"
+            "-missing\n"
+            "+changed\n"
+            "*** Add File: b.txt\n"
+            "+new\n"
+            "*** End Patch"
+        )
+
+        result = await self._patch(patch)
+
+        self.assertTrue(result.is_error)
+        self.assertEqual(self.path.read_text("utf-8"), "alpha\n")
+        self.assertFalse((self.root / "b.txt").exists())
+
+    async def test_apply_patch_delete_removes_file(self):
+        self.path.write_text("alpha\n", encoding="utf-8")
+        patch = (
+            "*** Begin Patch\n"
+            "*** Delete File: a.txt\n"
+            "*** End Patch"
+        )
+
+        result = await self._patch(patch)
+
+        self.assertFalse(result.is_error, result.content)
+        self.assertFalse(self.path.exists())
+
+    async def test_edit_allows_unique_replacement_without_prior_read(self):
         self.path.write_text("alpha", encoding="utf-8")
 
         result = await self._edit(
             path="a.txt", edits=[{"old_text": "alpha", "new_text": "beta"}]
         )
 
-        self.assertTrue(result.is_error)
-        self.assertIn("Read a.txt before editing", result.content)
+        self.assertFalse(result.is_error)
+        self.assertEqual(self.path.read_text("utf-8"), "beta")
 
     async def test_edit_replaces_after_read(self):
         self.path.write_text("alpha", encoding="utf-8")

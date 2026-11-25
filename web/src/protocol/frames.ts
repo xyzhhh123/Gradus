@@ -52,6 +52,15 @@ export interface MessageWire {
   text: string
 }
 
+export type StopReasonWire =
+  | 'stop'
+  | 'length'
+  | 'tool_use'
+  | 'deferred'
+  | 'filtered'
+  | 'error'
+  | 'aborted'
+
 /** `agent/event` 的 payload，与 `gradus/agent/types.py` 的 AgentEvent 一一对应。 */
 export type WireEvent =
   | { type: 'agent/start' }
@@ -61,7 +70,7 @@ export type WireEvent =
   | { type: 'tool/update'; id: string; partial: string }
   | { type: 'tool/end'; id: string; result: ToolResultWire; durationMs?: number }
   | { type: 'turn/end'; usage: UsageWire }
-  | { type: 'agent/done'; usage: UsageWire; turns: number }
+  | { type: 'agent/done'; usage: UsageWire; turns: number; stopReason?: StopReasonWire }
   | {
       type: 'agent/error'
       kind: 'provider' | 'aborted' | 'max_turns' | 'config'
@@ -173,6 +182,8 @@ export interface Snapshot {
   workspace?: string
   /** 当前模型；旧后端没有这个字段。 */
   model?: ModelSummary
+  /** 最后一条助手消息的终止原因；旧后端没有这个字段。 */
+  lastStopReason?: StopReasonWire | null
 }
 
 export interface ConfirmRequest {

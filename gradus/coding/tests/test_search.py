@@ -105,6 +105,21 @@ class SearchTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.is_error)
         self.assertIn("Not a directory", result.content)
 
+    async def test_search_rejects_absolute_and_parent_paths(self):
+        absolute = await self.grep.execute(
+            "c1",
+            {"pattern": "foo", "path": str(self.root)},
+        )
+        parent = await self.glob.execute(
+            "c1",
+            {"pattern": "*", "path": "../"},
+        )
+
+        self.assertTrue(absolute.is_error)
+        self.assertIn("must be relative", absolute.content)
+        self.assertTrue(parent.is_error)
+        self.assertIn("must not contain", parent.content)
+
     def test_factory_names(self):
         names = [tool.spec.name for tool in create_search_tools(self.root)]
 

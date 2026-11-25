@@ -70,8 +70,21 @@ from .types import (
     ToolResult,
     TurnEnd,
     TurnStart,
+    model_visible_tool_content,
 )
 from .validation import validate_arguments
+
+#: 「撞输出上限且没有工具调用」的轮次最多补救几次。每次补救都是一整轮请求，
+#: 所以留一点余量就够：真正的问题是模型想一次写完，而不是差一次机会。
+MAX_BARE_TRUNCATION_RETRIES = 2
+
+BARE_TRUNCATION_NOTICE = (
+    "Your previous response was cut off by the output-token limit and "
+    "contained no tool call, so nothing was executed. Stop restating the "
+    "plan. Take one concrete action in this response: write or edit one "
+    "file, or run one command. Build the deliverable up across several "
+    "turns instead of emitting it in one reply."
+)
 
 
 async def _run_loop_events(
@@ -114,6 +127,11 @@ async def _run_loop_events(
     pending_messages: list[Message] = []
     total_usage = Usage()
 
+    # 连续「撞输出上限且没有任何工具调用」的次数。这种轮次什么都没做，
+    # 直接收工会让调用方以为任务做完了；给几次机会让它改成小步行动。
+    bare_truncations = 0
+    pending_truncation_notice: UserMessage | None = None
+
     turn = 0
     limit = config.max_turns
 
@@ -148,6 +166,13 @@ async def _run_loop_events(
                     usage=total_usage,
                 )
                 return
+
+        # 上一轮是空转截断且还有补救预算：在真正发下一次请求前才提交提示。
+        # 这样 max_turns 或 finish_turn("end") 终止时，不会留下没被模型看到的伪消息。
+        if pending_truncation_notice is not None:
+            transcript.append(pending_truncation_notice)
+            new_messages.append(pending_truncation_notice)
+            pending_truncation_notice = None
 
         yield TurnStart(turn)
 
@@ -310,7 +335,7 @@ async def _run_loop_events(
 
                 return push
 
-            if _can_run_parallel(registry, calls):
+            if config.allow_parallel_tools and _can_run_parallel(registry, calls):
                 for call in calls:
                     yield ToolExecutionStart(call)
 
@@ -369,6 +394,24 @@ async def _run_loop_events(
         # 只有整批结果都要求终止时才跳过下一次模型请求。
         batch_terminated = bool(tool_terminated) and all(tool_terminated)
 
+        # 撞上限且一个工具调用都没有：这一轮等于空转。实测模型在这种情况下会一直
+        # 想「把整套方案写完」，上限调到 64k 也只是把失败推迟到更慢的一次。
+        # 所以不直接收工，而是明确告诉它改成小步执行，给它几次机会。
+        bare_truncation = truncated and not calls
+        if bare_truncation:
+            bare_truncations += 1
+        else:
+            bare_truncations = 0
+        retry_bare_truncation = (
+            bare_truncation
+            and bare_truncations <= MAX_BARE_TRUNCATION_RETRIES
+        )
+        if retry_bare_truncation:
+            pending_truncation_notice = UserMessage(
+                BARE_TRUNCATION_NOTICE,
+                origin="harness",
+            )
+
         transcript.extend(turn_messages)
         new_messages.extend(turn_messages)
 
@@ -420,6 +463,7 @@ async def _run_loop_events(
             (stop_reason == "tool_use" and not batch_terminated)
             or stop_reason == "deferred"
             or (truncated and bool(calls))
+            or retry_bare_truncation
             or steering_added
             or action == "continue"
         )
@@ -674,7 +718,7 @@ def _append_tool_result(
     """把一次工具执行结果写进本轮消息，并记录 `terminate` 提示。"""
     tool_result = ToolResultMessage(
         tool_call_id=call.id,
-        content=result.content,
+        content=model_visible_tool_content(result),
         is_error=result.is_error,
     )
     tool_results.append(tool_result)

@@ -11,9 +11,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...agent.base import AgentTool, ToolUpdateCallback
-from ...agent.types import ToolResult
+from ...agent.types import ToolCapability, ToolResult
 from ...ai.base import ToolSpec
 from ..history import DEFAULT_LIMIT, MAX_LIMIT
+
+RECALL_CAPABILITY = ToolCapability(effects=("read",), result_kind="evidence")
 
 
 RECALL_HISTORY_SPEC = ToolSpec(
@@ -59,6 +61,7 @@ class RecallHistoryTool:
 
     spec = RECALL_HISTORY_SPEC
     execution_mode = "parallel"
+    capability = RECALL_CAPABILITY
 
     def __init__(self, hooks: RecallHooks) -> None:
         self._hooks = hooks

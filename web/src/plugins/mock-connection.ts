@@ -107,6 +107,7 @@ class MockConnection implements ConnectionApi {
         type: 'agent/done',
         usage: { inputTokens: 120, outputTokens: 48 },
         turns: 1,
+        stopReason: 'stop',
       }),
     )
   }

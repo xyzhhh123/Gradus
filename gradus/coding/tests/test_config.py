@@ -59,7 +59,6 @@ class ContextBudgetConfigTest(unittest.TestCase):
                 with self.assertRaises(ConfigError):
                     load(env=dict(FULL_ENV, **{name: "0"}))
 
-
 class RequestHeadersConfigTest(unittest.TestCase):
     """自定义请求头：文件里是对象，环境里是 `k=v;k=v`，后者按名字覆盖前者。"""
 
@@ -167,7 +166,7 @@ class RequestHeadersConfigTest(unittest.TestCase):
 
 
 class ModelCapabilityTest(unittest.TestCase):
-    """窗口按模型能力给；输出上限仍取保守值；显式值只能往下压。"""
+    """窗口默认按工作预算给；能力上限单独记录；显式值只能往下压。"""
 
     MODEL = "deepseek-v4.1-flash"
     ENV = {
@@ -176,10 +175,10 @@ class ModelCapabilityTest(unittest.TestCase):
         "GRADUS_API_KEY": "sk-test",
     }
 
-    def test_window_comes_from_the_capability_table(self):
+    def test_window_defaults_to_working_budget(self):
         settings = load(env=dict(self.ENV))
 
-        self.assertEqual(settings.spec.context_window, 1_000_000)
+        self.assertEqual(settings.spec.context_window, DEFAULT_CONTEXT_WINDOW)
         self.assertEqual(settings.spec.window_limit, 1_000_000)
 
     def test_output_stays_conservative_but_records_the_limit(self):

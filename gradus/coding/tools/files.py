@@ -2,9 +2,10 @@
 
 每个工具实现 `agent.base.AgentTool`：`spec`、`execution_mode`、`async execute()`。
 
-对齐 Pi：
-- 相对路径基于 workspace 解析，绝对路径与 `..` 允许；工具内不做沙箱，
-  越界拦截由权限层（`permissions` / `before_tool_call`）负责；
+- 模型只传 workspace-relative POSIX 路径；绝对路径、盘符、UNC 与 `..` 由
+  `coding.paths` 统一拒绝；
+- 工具在边界把相对路径解析成副本内 canonical absolute path，并再次检查
+  realpath 没有逃出 workspace；
 - `read_file` 支持 `offset` / `limit`，输出不带行号，上限 2000 行或 50KB；
 - `list_dir` 最多 500 项，目录名带 `/`，包含点文件；
 - `write_file` 新建或覆盖，自动创建父目录；
@@ -12,29 +13,47 @@
 - `delete_file` 删单个文件，不起进程——AppContainer 里 `Remove-Item` 被平台
   拒绝，模型需要一条不依赖 shell 的删除路径。
 
-先读后写：`FileTracker` 记录已读文件，`edit` 未读过就拒绝。
+精确编辑：`FileTracker` 记录已读文件；`edit` 以 old_text 的唯一匹配为安全条件，
+未读过时仍允许安全替换，找不到匹配时提示读取当前内容。
 读文件、列目录、写文件都走 `asyncio.to_thread`，避免阻塞事件循环。
 """
 
 from __future__ import annotations
 
 import asyncio
+from contextlib import AsyncExitStack
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ...agent.base import AgentTool, ToolUpdateCallback
-from ...agent.types import ToolResult
+from ...agent.types import ToolCapability, ToolResult
 from ...ai.base import ToolSpec
+from ..paths import WorkspacePathError, workspace_path
 
 MAX_LINES = 2000
 MAX_BYTES = 50 * 1024
 MAX_ENTRIES = 500
 
+READ_CAPABILITY = ToolCapability(effects=("read",), result_kind="evidence")
+WRITE_CAPABILITY = ToolCapability(
+    effects=("write",),
+    result_kind="output",
+    mutates_workspace=True,
+    idempotent=False,
+)
+DELETE_CAPABILITY = ToolCapability(
+    effects=("write",),
+    result_kind="output",
+    mutates_workspace=True,
+    idempotent=False,
+)
+
 READ_SPEC = ToolSpec(
     name="read_file",
     description=(
-        "Read a text file. Relative paths resolve from the working directory. "
+        "Read a text file. Path must be relative to the workspace root. "
         f"Output is truncated to {MAX_LINES} lines or {MAX_BYTES // 1024}KB, "
         "whichever comes first. Use offset/limit for large files."
     ),
@@ -43,7 +62,7 @@ READ_SPEC = ToolSpec(
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File to read (relative or absolute)",
+                "description": "Workspace-relative file path (POSIX separators)",
             },
             "offset": {
                 "type": "integer",
@@ -63,14 +82,17 @@ READ_SPEC = ToolSpec(
 WRITE_SPEC = ToolSpec(
     name="write_file",
     description=(
-        "Create or overwrite a file. Parent directories are created automatically."
+        "Create a new file or intentionally replace a complete existing file. "
+        "Path must be relative to the workspace root; parent directories are created "
+        "automatically. For an existing file, "
+        "prefer edit when only part of the file changes."
     ),
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File to write (relative or absolute)",
+                "description": "Workspace-relative file path (POSIX separators)",
             },
             "content": {
                 "type": "string",
@@ -84,15 +106,17 @@ WRITE_SPEC = ToolSpec(
 EDIT_SPEC = ToolSpec(
     name="edit",
     description=(
-        "Apply exact-text replacements to one file. Every edits[].old_text must "
-        "appear exactly once in the original file, and replacements must not overlap."
+        "Apply exact-text replacements to one existing workspace-relative file. Read the file with "
+        "read_file first; shell reads such as cat/sed do not satisfy this requirement. "
+        "Every edits[].old_text must appear exactly once in the original file, and "
+        "replacements must not overlap. Prefer this tool for scoped source edits."
     ),
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File to edit (relative or absolute)",
+                "description": "Workspace-relative file path (POSIX separators)",
             },
             "edits": {
                 "type": "array",
@@ -125,7 +149,7 @@ EDIT_SPEC = ToolSpec(
 DELETE_SPEC = ToolSpec(
     name="delete_file",
     description=(
-        "Delete one file. Relative paths resolve from the working directory. "
+        "Delete one workspace-relative file. "
         "Directories are rejected; remove files inside them one by one."
     ),
     parameters={
@@ -133,16 +157,47 @@ DELETE_SPEC = ToolSpec(
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File to delete (relative or absolute)",
+                "description": "Workspace-relative file path (POSIX separators)",
             },
         },
         "required": ["path"],
     },
 )
 
+PATCH_SPEC = ToolSpec(
+    name="apply_patch",
+    description=(
+        "Apply a multi-file patch with Begin/Add/Update/Delete/End markers. All file "
+        "paths must be workspace-relative. "
+        "Update hunks use unified-diff prefixes: space keeps context, '-' removes "
+        "a line, '+' adds a line. Every hunk must match exactly once. Use this for "
+        "coordinated edits across one or more source files."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "patch": {
+                "type": "string",
+                "description": (
+                    "Patch text. Example:\n"
+                    "*** Begin Patch\n"
+                    "*** Update File: src/a.py\n"
+                    "@@\n"
+                    " old\n"
+                    "-before\n"
+                    "+after\n"
+                    "*** End Patch"
+                ),
+            }
+        },
+        "required": ["patch"],
+        "additionalProperties": False,
+    },
+)
+
 
 class FileTracker:
-    """记录本会话成功读过的文件，用于 `edit` 的先读后写检查。"""
+    """记录本会话成功读过的文件，供工具结果和诊断使用。"""
 
     def __init__(self) -> None:
         self._read: set[Path] = set()
@@ -159,6 +214,7 @@ class ReadFileTool:
 
     spec = READ_SPEC
     execution_mode = "parallel"
+    capability = READ_CAPABILITY
 
     def __init__(
         self,
@@ -177,7 +233,10 @@ class ReadFileTool:
         path = str(arguments.get("path", ""))
         offset = arguments.get("offset")
         limit = arguments.get("limit")
-        resolved = _resolve(path, self._root)
+        try:
+            resolved = _resolve(path, self._root)
+        except WorkspacePathError as exc:
+            return ToolResult(str(exc), is_error=True)
 
         if not resolved.exists():
             return ToolResult(f"File not found: {path}", is_error=True)
@@ -238,6 +297,7 @@ class WriteFileTool:
 
     spec = WRITE_SPEC
     execution_mode = "serial"
+    capability = WRITE_CAPABILITY
 
     def __init__(
         self,
@@ -265,7 +325,10 @@ class WriteFileTool:
         if not isinstance(content, str):
             return ToolResult("content must be a string", is_error=True)
 
-        resolved = _resolve(path, self._root)
+        try:
+            resolved = _resolve(path, self._root)
+        except WorkspacePathError as exc:
+            return ToolResult(str(exc), is_error=True)
         owner = self._guard(resolved) if self._guard is not None else None
         if owner:
             return ToolResult(_owned_message(path, owner), is_error=True)
@@ -288,10 +351,11 @@ class WriteFileTool:
 
 
 class EditTool:
-    """按 `edits[]` 做精确替换；要求先读过文件。"""
+    """按 `edits[]` 做精确替换；唯一匹配优先，不要求单次调用前读取。"""
 
     spec = EDIT_SPEC
     execution_mode = "serial"
+    capability = WRITE_CAPABILITY
 
     def __init__(
         self,
@@ -313,7 +377,10 @@ class EditTool:
     ) -> ToolResult:
         path = str(arguments.get("path", ""))
         edits = arguments.get("edits")
-        resolved = _resolve(path, self._root)
+        try:
+            resolved = _resolve(path, self._root)
+        except WorkspacePathError as exc:
+            return ToolResult(str(exc), is_error=True)
         owner = self._guard(resolved) if self._guard is not None else None
         if owner:
             return ToolResult(_owned_message(path, owner), is_error=True)
@@ -322,10 +389,6 @@ class EditTool:
             return ToolResult(f"File not found: {path}", is_error=True)
         if resolved.is_dir():
             return ToolResult(f"Not a file: {path}", is_error=True)
-        if not self._tracker.was_read(resolved):
-            return ToolResult(
-                f"Read {path} before editing it", is_error=True
-            )
         if not isinstance(edits, list) or not edits:
             return ToolResult("edits must be a non-empty array", is_error=True)
 
@@ -358,7 +421,9 @@ class EditTool:
                 count = text.count(old)
                 if count == 0:
                     return ToolResult(
-                        f"edits[{index}].old_text not found in {path}", is_error=True
+                        f"edits[{index}].old_text not found in {path}; "
+                        "use read_file to inspect the current text",
+                        is_error=True,
                     )
                 if count > 1:
                     return ToolResult(
@@ -386,6 +451,7 @@ class EditTool:
             except OSError as exc:
                 return ToolResult(f"Cannot write {path}: {exc}", is_error=True)
 
+            self._tracker.mark_read(resolved)
             return ToolResult(f"Edited {path}: {len(edits)} replacement(s)")
 
 
@@ -394,6 +460,7 @@ class DeleteFileTool:
 
     spec = DELETE_SPEC
     execution_mode = "serial"
+    capability = DELETE_CAPABILITY
 
     def __init__(
         self,
@@ -415,7 +482,10 @@ class DeleteFileTool:
         if not path:
             return ToolResult("path must not be empty", is_error=True)
 
-        resolved = _resolve(path, self._root)
+        try:
+            resolved = _resolve(path, self._root)
+        except WorkspacePathError as exc:
+            return ToolResult(str(exc), is_error=True)
         owner = self._guard(resolved) if self._guard is not None else None
         if owner:
             return ToolResult(_owned_message(path, owner), is_error=True)
@@ -431,6 +501,187 @@ class DeleteFileTool:
             return ToolResult(f"Cannot delete {path}: {exc}", is_error=True)
 
         return ToolResult(f"Deleted {path}")
+
+
+class PatchError(ValueError):
+    """The supplied patch is malformed or does not match the workspace."""
+
+
+@dataclass(frozen=True)
+class _Hunk:
+    old: tuple[str, ...]
+    new: tuple[str, ...]
+    additions: int
+    deletions: int
+
+
+@dataclass(frozen=True)
+class _FilePatch:
+    action: str
+    path: str
+    content: str = ""
+    hunks: tuple[_Hunk, ...] = ()
+
+
+class ApplyPatchTool:
+    """Apply a Codex-style multi-file patch atomically enough for agent edits."""
+
+    spec = PATCH_SPEC
+    execution_mode = "serial"
+    capability = WRITE_CAPABILITY
+
+    def __init__(
+        self,
+        root: Path,
+        tracker: FileTracker | None = None,
+        locks: PathLocks | None = None,
+        guard: "Guard | None" = None,
+    ) -> None:
+        self._root = root
+        self._tracker = tracker
+        self._locks = locks or _DEFAULT_LOCKS
+        self._guard = guard
+
+    async def execute(
+        self,
+        call_id: str,
+        arguments: dict[str, Any],
+        on_update: ToolUpdateCallback | None = None,
+    ) -> ToolResult:
+        raw = arguments.get("patch")
+        if not isinstance(raw, str) or not raw.strip():
+            return ToolResult("patch must be a non-empty string", is_error=True)
+        try:
+            patches = _parse_patch(raw)
+            prepared = await self._prepare(patches)
+            changes = await self._commit(prepared)
+        except (PatchError, WorkspacePathError, OSError, UnicodeDecodeError) as exc:
+            return ToolResult(f"patch failed: {exc}", is_error=True)
+
+        summary = ", ".join(
+            f"{change['action']} {change['path']}" for change in changes
+        )
+        return ToolResult(
+            f"Applied patch: {summary}",
+            structured_content={"workspace_changes": changes},
+            details={"workspace_changes": changes},
+        )
+
+    async def _prepare(self, patches: list[_FilePatch]) -> dict[str, Any]:
+        prepared: dict[str, Any] = {}
+        for patch in patches:
+            resolved = _resolve(patch.path, self._root)
+            relative = _relative(resolved, self._root)
+            if relative in prepared:
+                raise PatchError(f"file appears more than once: {relative}")
+            owner = self._guard(resolved) if self._guard is not None else None
+            if owner:
+                raise PatchError(_owned_message(relative, owner))
+
+            if patch.action == "add":
+                if resolved.exists():
+                    raise PatchError(f"cannot add existing file: {relative}")
+                prepared[relative] = {
+                    "path": resolved,
+                    "action": "add",
+                    "before": None,
+                    "after": patch.content,
+                    "additions": len(patch.content.splitlines()),
+                    "deletions": 0,
+                }
+                continue
+
+            if not resolved.exists():
+                raise PatchError(f"file not found: {relative}")
+            if resolved.is_dir():
+                raise PatchError(f"not a file: {relative}")
+            before = await asyncio.to_thread(resolved.read_text, encoding="utf-8")
+
+            if patch.action == "delete":
+                prepared[relative] = {
+                    "path": resolved,
+                    "action": "delete",
+                    "before": before,
+                    "after": None,
+                    "additions": 0,
+                    "deletions": len(before.splitlines()),
+                }
+                continue
+
+            after = before
+            additions = deletions = 0
+            for number, hunk in enumerate(patch.hunks, start=1):
+                old = "\n".join(hunk.old)
+                if not old:
+                    raise PatchError(
+                        f"{relative}: hunk {number} has no context or removed lines"
+                    )
+                count = after.count(old)
+                if count == 0:
+                    raise PatchError(
+                        f"{relative}: hunk {number} did not match; re-read the file"
+                    )
+                if count > 1:
+                    raise PatchError(
+                        f"{relative}: hunk {number} matched {count} times; add context"
+                    )
+                after = after.replace(old, "\n".join(hunk.new), 1)
+                deletions += hunk.deletions
+                additions += hunk.additions
+
+            if after == before:
+                raise PatchError(f"{relative}: patch made no changes")
+            prepared[relative] = {
+                "path": resolved,
+                "action": "update",
+                "before": before,
+                "after": after,
+                "additions": additions,
+                "deletions": deletions,
+            }
+        return prepared
+
+    async def _commit(self, prepared: dict[str, Any]) -> list[dict[str, Any]]:
+        changes: list[dict[str, Any]] = []
+        applied: list[dict[str, Any]] = []
+        async with AsyncExitStack() as stack:
+            for item in sorted(
+                prepared.values(),
+                key=lambda value: str(value["path"]),
+            ):
+                await stack.enter_async_context(
+                    self._locks.lock_for(item["path"])
+                )
+            try:
+                for relative, item in prepared.items():
+                    path: Path = item["path"]
+                    if item["action"] == "delete":
+                        await asyncio.to_thread(path.unlink)
+                    else:
+                        await asyncio.to_thread(
+                            path.parent.mkdir, parents=True, exist_ok=True
+                        )
+                        await asyncio.to_thread(_write_lf, path, item["after"])
+                        if self._tracker is not None:
+                            self._tracker.mark_read(path)
+                    applied.append(item)
+                    changes.append(
+                        {
+                            "path": relative,
+                            "action": item["action"],
+                            "additions": item["additions"],
+                            "deletions": item["deletions"],
+                        }
+                    )
+            except OSError:
+                for item in reversed(applied):
+                    path: Path = item["path"]
+                    if item["before"] is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        await asyncio.to_thread(_write_lf, path, item["before"])
+                raise
+        return changes
 
 
 class PathLocks:
@@ -481,14 +732,133 @@ def create_file_tools(
         WriteFileTool(base, tracker, locks, guard),
         EditTool(base, tracker, locks, guard),
         DeleteFileTool(base, locks, guard),
+        ApplyPatchTool(base, tracker, locks, guard),
     ]
 
 
+def _relative(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _parse_patch(text: str) -> list[_FilePatch]:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "*** Begin Patch":
+        raise PatchError("patch must start with *** Begin Patch")
+    if lines[-1].strip() != "*** End Patch":
+        raise PatchError("patch must end with *** End Patch")
+
+    patches: list[_FilePatch] = []
+    index = 1
+    while index < len(lines) - 1:
+        line = lines[index]
+        if not line.strip():
+            index += 1
+            continue
+        header = _file_header(line)
+        if header is None:
+            raise PatchError(f"expected file header, got: {line}")
+        action, path = header
+        index += 1
+
+        if action == "add":
+            body: list[str] = []
+            while (
+                index < len(lines) - 1
+                and lines[index].strip() != "*** End Patch"
+                and _file_header(lines[index]) is None
+            ):
+                current = lines[index]
+                if not current.startswith("+"):
+                    raise PatchError(
+                        f"add file {path}: every content line must start with '+'"
+                    )
+                body.append(current[1:])
+                index += 1
+            content = "\n".join(body)
+            if body:
+                content += "\n"
+            patches.append(_FilePatch("add", path, content=content))
+            continue
+
+        if action == "delete":
+            while (
+                index < len(lines) - 1
+                and lines[index].strip() != "*** End Patch"
+                and _file_header(lines[index]) is None
+            ):
+                if lines[index].strip():
+                    raise PatchError(f"delete file {path}: unexpected content")
+                index += 1
+            patches.append(_FilePatch("delete", path))
+            continue
+
+        hunks: list[_Hunk] = []
+        old: list[str] | None = None
+        new: list[str] = []
+        additions = deletions = 0
+        while (
+            index < len(lines) - 1
+            and lines[index].strip() != "*** End Patch"
+            and _file_header(lines[index]) is None
+        ):
+            current = lines[index]
+            if current.startswith("@@"):
+                if old is not None:
+                    hunks.append(
+                        _Hunk(tuple(old), tuple(new), additions, deletions)
+                    )
+                old = []
+                new = []
+                additions = deletions = 0
+                index += 1
+                continue
+            if old is None:
+                raise PatchError(f"update file {path}: hunk must start with @@")
+            prefix = current[:1]
+            if prefix == " ":
+                old.append(current[1:])
+                new.append(current[1:])
+            elif prefix == "-":
+                old.append(current[1:])
+                deletions += 1
+            elif prefix == "+":
+                new.append(current[1:])
+                additions += 1
+            else:
+                raise PatchError(
+                    f"update file {path}: hunk lines need ' ', '-', or '+'"
+                )
+            index += 1
+        if old is not None:
+            hunks.append(_Hunk(tuple(old), tuple(new), additions, deletions))
+        if not hunks:
+            raise PatchError(f"update file {path}: no hunks")
+        patches.append(_FilePatch("update", path, hunks=tuple(hunks)))
+
+    if not patches:
+        raise PatchError("patch contains no file operations")
+    return patches
+
+
+def _file_header(line: str) -> tuple[str, str] | None:
+    for label, action in (
+        ("*** Add File: ", "add"),
+        ("*** Update File: ", "update"),
+        ("*** Delete File: ", "delete"),
+    ):
+        if line.startswith(label):
+            path = line[len(label) :].strip()
+            if not path:
+                raise PatchError(f"{label.strip()} requires a path")
+            return action, path
+    return None
+
+
 def _resolve(path: str, root: Path) -> Path:
-    candidate = Path(path).expanduser()
-    if not candidate.is_absolute():
-        candidate = root / candidate
-    return candidate.resolve()
+    return workspace_path(root, path)
 
 
 def _truncate(

@@ -30,6 +30,22 @@ class _BadTool:
         return ToolResult("boom", is_error=True)
 
 
+class _StructuredTool:
+    spec = ToolSpec(
+        name="structured",
+        description="d",
+        parameters={"type": "object"},
+    )
+    execution_mode = "serial"
+
+    async def execute(self, call_id, arguments, on_update=None):
+        return ToolResult(
+            "visible",
+            structured_content={"value": arguments["value"]},
+            details={"source": "nested"},
+        )
+
+
 class CodemodeTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -40,6 +56,55 @@ class CodemodeTest(unittest.IsolatedAsyncioTestCase):
 
     def _codemode(self, tools=(), confirm=None):
         return create_codemode_tool(list(tools), Policy(workspace=self.root), confirm)
+
+    def test_description_lists_callable_tool_signatures(self):
+        echo = FunctionTool(
+            spec=ToolSpec(
+                name="echo",
+                description="Echo one value",
+                parameters={
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                    "required": ["x"],
+                },
+            ),
+            handler=lambda arguments: arguments["x"],
+            execution_mode="parallel",
+        )
+
+        description = self._codemode([echo]).spec.description
+
+        self.assertIn("tools.echo(x: string)", description)
+        self.assertIn("Only `text(value)` and `return`", description)
+        self.assertIn("Execution boundary: local", description)
+
+    def test_local_boundary_is_not_marked_as_isolated(self):
+        tool = self._codemode()
+
+        self.assertFalse(tool.boundary.isolated)
+        self.assertFalse(tool.capability.contained_effects)
+        self.assertTrue(tool.capability.mutates_workspace)
+
+    async def test_nested_structured_result_reaches_script_and_host(self):
+        code = (
+            "value = tools.structured(value=7)\n"
+            "text(value.structured_content['value'])\n"
+            "return value.details['source']"
+        )
+
+        async def confirm(question: str) -> bool:
+            return True
+
+        result = await self._codemode([_StructuredTool()], confirm).execute(
+            "c1",
+            {"code": code},
+        )
+
+        self.assertFalse(result.is_error, result.content)
+        self.assertEqual(result.content, "7\nnested")
+        nested = result.details["nested_calls"][0]
+        self.assertEqual(nested["structured_content"], {"value": 7})
+        self.assertEqual(nested["details"], {"source": "nested"})
 
     async def test_text_and_return(self):
         result = await self._codemode().execute(
@@ -62,6 +127,49 @@ class CodemodeTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(result.is_error)
         self.assertEqual(result.content, "hi")
+
+    async def test_script_searches_and_calls_tool_by_runtime_name(self):
+        echo = _tool("echo", lambda arguments: arguments["x"])
+        code = textwrap.dedent(
+            """
+            matches = search_tools("echo")
+            name = matches[0]["name"]
+            text(name)
+            text(describe_tool(name)["parameters"]["type"])
+            text(tools[name](x="hi"))
+            """
+        )
+
+        async def confirm(question: str) -> bool:
+            return True
+
+        result = await self._codemode([echo], confirm).execute("c1", {"code": code})
+
+        self.assertFalse(result.is_error, result.content)
+        self.assertEqual(result.content, "echo\nobject\nhi")
+
+    async def test_search_tools_rejects_empty_query(self):
+        code = textwrap.dedent(
+            """
+            try:
+                search_tools("")
+            except ValueError as exc:
+                text(str(exc))
+            """
+        )
+
+        result = await self._codemode().execute("c1", {"code": code})
+
+        self.assertFalse(result.is_error)
+        self.assertIn("query must not be empty", result.content)
+
+    async def test_describe_unknown_tool_returns_none(self):
+        result = await self._codemode().execute(
+            "c1", {"code": 'text(describe_tool("missing") is None)'}
+        )
+
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.content, "True")
 
     async def test_tool_error_raises_in_script(self):
         code = textwrap.dedent(

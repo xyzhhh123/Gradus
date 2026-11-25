@@ -93,6 +93,31 @@ class ParallelToolsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second.calls, ["c2"])
         self.assertIsInstance(events[-1], AgentDone)
 
+    async def test_capability_can_disable_parallel_tool_calls(self):
+        probe = Probe()
+        first = ProbeTool("first", probe)
+        second = ProbeTool("second", probe)
+        provider = make_provider(
+            tool_script([("c1", "first", {}), ("c2", "second", {})]),
+            text_script("done"),
+        )
+
+        events = [
+            event
+            async for event in run_loop(
+                provider,
+                [UserMessage("hi")],
+                LoopConfig(
+                    system="",
+                    tools=[first, second],
+                    allow_parallel_tools=False,
+                ),
+            )
+        ]
+
+        self.assertEqual(probe.max_active, 1)
+        self.assertIsInstance(events[-1], AgentDone)
+
     async def test_results_keep_source_order(self):
         probe = Probe()
         slow = ProbeTool("slow", probe, delay=0.05)

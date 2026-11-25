@@ -461,12 +461,12 @@ def _budget_window(
 ) -> tuple[int, int | None]:
     """定出**窗口**的预算口径与能力上限。
 
-    窗口是「容量」，按能力给是对的：模型能装 1M，就没理由只按 128k 管上下文。
-    显式值只能**往下压**：超过已知上限时收敛到上限（超了只会换来一次 400），
-    界面上可以显示「已按模型上限收敛」。
+    窗口默认是**工作预算**，不是模型能力上限。模型能装 1M 不代表每次请求都该
+    带着 1M 历史；`window_limit` 单独记录真实能力。显式值只能往下压，超过
+    已知上限时收敛到上限。
     """
     if explicit is None:
-        return (limit or default, limit)
+        return (min(limit, default) if limit is not None else default, limit)
     if limit is not None and explicit > limit:
         return (limit, limit)
     return (explicit, limit)

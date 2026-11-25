@@ -166,6 +166,29 @@ class ToolSearchTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([tool.spec.name for tool in search.take_pending()], ["mcp__x__run"])
         self.assertEqual(search.take_pending(), [])
 
+    async def test_successful_outcomes_raise_future_ranking(self):
+        pool = [
+            _tool("tool_a", "match me"),
+            _tool("tool_b", "match me"),
+        ]
+        search = ToolSearchTool(pool)
+        search.note_outcome("tool_b", False)
+        search.note_outcome("tool_b", False)
+        search.note_outcome("tool_a", True)
+
+        result = await search.execute("c1", {"query": "match"})
+
+        self.assertTrue(result.content.startswith("tool_b"), result.content)
+        self.assertGreater(search.feedback["tool_b"], search.feedback["tool_a"])
+
+    async def test_search_counts_are_visible_in_session_feedback_state(self):
+        search = ToolSearchTool([_tool("run", "run things")])
+
+        await search.execute("c1", {"query": "run"})
+        search.note_outcome("run", False)
+
+        self.assertEqual(search.feedback["run"], 2.05)
+
 
 class PrepareNextTurnTest(unittest.IsolatedAsyncioTestCase):
     async def test_adds_loaded_tools_to_next_turn(self):

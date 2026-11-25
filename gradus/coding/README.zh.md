@@ -30,10 +30,15 @@ ai/       Provider、内部协议
 - 用 `before_tool_call` 做权限拦截，用事件流做日志与终端展示；
 - 会话历史的内存保存与落盘；
 - 上下文预算、压缩、重试与模型路由；
-- 连接 `.gradus/mcp.json` 中列出的 MCP server（项目配置首次确认后记住），按 server / `toolExposure` 策略暴露工具：默认 `deferred`，由 `tool_search` 按需加载；配了 `oauth` 的 HTTP server 走浏览器授权，token 存在 `~/.gradus/mcp-auth.json`；
+- Provider context overflow 时强制压缩/投影裁剪并只重试一次；
+- 工作区发生修改后，若没有随后成功的测试、构建或检查命令，完成前会要求一次基于证据的复查；
+- 工具可选能力会进入权限判断、Codemode 声明与运行时调度；
+- 支持多文件精确上下文补丁，并把结构化工作区变更写入会话账本；
+- 文件、搜索与 patch 工具只接受 workspace-relative POSIX 路径，边界处解析成副本内 canonical 路径，并拒绝绝对路径、盘符、UNC、`..` 和 symlink 越界；
+- 连接 `.gradus/mcp.json` 中列出的 MCP server（项目配置首次确认后记住），按 server / `toolExposure` 策略暴露工具：默认 `deferred`；codemode 可在一次脚本里搜索并调用 deferred 工具，`tool_search` 则用于把匹配工具声明出来以便后续反复直接调用；配了 `oauth` 的 HTTP server 走浏览器授权，token 存在 `~/.gradus/mcp-auth.json`；
 - 从 `<workspace>/.gradus/extensions` 动态加载扩展（需信任）——Python 工具、Markdown 斜杠命令、`SKILL.md` 技能；`/reload` 可不重启重新加载；
-- 从 workspace 及其上级目录读 `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md`，按「根 -> workspace」拼进系统提示（不需要信任）；
-- 命令与 `codemode` 走可替换的执行环境：`restricted`（Windows，免管理员：读跟随当前账户、写只在副本里；**不阻断网络**）、`appcontainer`（Windows 零安装，已弃用）、`local`（宿主）、`docker`（长驻容器、默认断网、限制内存 / CPU / 进程数、不继承宿主环境变量；**测试中**，保留为跨平台备用）；拿不到所选后端时不回落 local，直接禁用命令类工具并告警；
+- 从 workspace 及其上级目录读 `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md`，按「根 -> workspace」拼进系统提示（不需要信任；作为低优先级项目指导，不能覆盖安全边界或用户指令）；
+- 命令与 `codemode` 走可替换的执行环境：`restricted`（Windows，免管理员：读跟随当前账户、写只在副本里；**不阻断网络**）、`appcontainer`（Windows 零安装，已弃用）、`local`（宿主）、`docker`（长驻容器、默认断网、限制内存 / CPU / 进程数、不继承宿主环境变量；**测试中**，保留为跨平台备用）；local 下的 Codemode 会明确标记为非安全沙箱并要求外层确认；拿不到所选后端时不回落 local，直接禁用命令类工具并告警；
 - 命令行入口。
 
 不负责：
@@ -79,7 +84,10 @@ gradus/coding/
 ├── coding_plan.md      # 里程碑、进度与未定项
 ├── config.py           # 配置与模型选择：环境变量 -> ModelSpec
 ├── session.py          # 会话装配与 JSONL 历史
+├── changes.py          # 工作区变更来源账本
+├── completion.py       # 修改后的证据复查门禁
 ├── context.py          # token 预算、压缩切点与摘要
+├── paths.py            # workspace 相对路径契约与越界检查
 ├── retry.py            # 运行级重试策略（同模型）
 ├── retrieval.py        # 分词与 BM25（tool_search / recall_history 共用）
 ├── registry.py         # 工具注册表与函数工具适配
@@ -93,7 +101,8 @@ gradus/coding/
 ├── workspace.py        # 沙箱自有 workspace 副本与合回宿主
 ├── cli.py              # 命令行入口
 ├── tools/
-│   ├── files.py        # read_file / write_file / edit / delete_file
+│   ├── files.py        # read_file / write_file / edit / apply_patch / delete_file
+│   ├── spill.py        # 会话拥有的超长输出落盘
 │   ├── search.py       # grep / glob
 │   ├── shell.py        # bash / powershell
 │   ├── skill.py        # use_skill: 读技能正文（分片）
